@@ -12,7 +12,7 @@ param(
     [int]$Height = 540,
     [switch]$Single
 )
-$page = 'file:///' + ((Join-Path $PSScriptRoot 'index.html') -replace '\','/')
+$page = 'file:///' + (Join-Path $PSScriptRoot 'index.html').Replace([char]92, '/')
 $browser = @(
     "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
     "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
