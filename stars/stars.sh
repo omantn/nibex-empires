@@ -4,9 +4,9 @@
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODE=cruise      # cruise = parallax drift past side windows, warp = flying forward
+DIRECTION=left   # left | right = side windows, parallax drift; forward | backward = flying, vanishing point between the TVs
 SPEED=1          # motion multiplier
-DIRECTION=left   # cruise only: which way stars travel (left | right)
+MODE=            # legacy, ignored when DIRECTION is set
 GAP=0            # pixels of wall between the TVs, so stars cross the gap realistically
 ORDER=normal     # reverse if the TVs are swapped relative to the desktop layout
 COUNT=           # override star count (blank = automatic)
@@ -43,7 +43,7 @@ trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM INT EXIT
 VX=0; i=0
 for g in "${SCREENS[@]}"; do
   w=${g%%x*}; rest=${g#*x}; h=${rest%%+*}; rest=${rest#*+}; px=${rest%%+*}; py=${rest#*+}
-  url="file://$DIR/index.html?x=$VX&y=0&w=$w&h=$h&tw=$TW&th=$TH&mode=$MODE&speed=$SPEED&dir=$DIRECTION${COUNT:+&count=$COUNT}"
+  url="file://$DIR/index.html?x=$VX&y=0&w=$w&h=$h&tw=$TW&th=$TH&dir=$DIRECTION&speed=$SPEED${COUNT:+&count=$COUNT}"
   echo "screen $i: $g -> $url"
   "$CHROME" --ozone-platform=x11 --kiosk --window-position="$px,$py" --window-size="$w,$h" \
     --user-data-dir="/tmp/nibex-stars-$i" --no-first-run --noerrdialogs --disable-infobars \

@@ -17,9 +17,10 @@
   // Query params (all optional):
   //   x,y,w,h   this screen's slice of the virtual canvas
   //   tw,th     total virtual canvas size (all screens plus any wall gap)
-  //   mode      cruise (side windows, parallax layers drift past, default) | warp (flying forward)
+  //   dir       left | right (side windows: parallax layers drift past)
+  //             forward | backward (flying: stars stream out from, or into, the wall between the TVs)
+  //   mode      legacy alias: cruise = left, warp = forward (dir wins if both given)
   //   speed     multiplier, default 1
-  //   dir       cruise only: left | right (direction stars travel)
   //   count     override star count
   const q = new URLSearchParams(location.search);
   const num = (k, d) => { const v = parseFloat(q.get(k)); return Number.isFinite(v) ? v : d; };
@@ -27,9 +28,12 @@
     x: num('x', 0), y: num('y', 0),
     w: num('w', innerWidth), h: num('h', innerHeight),
     tw: num('tw', innerWidth), th: num('th', innerHeight),
-    mode: q.get('mode') === 'warp' ? 'warp' : 'cruise',
+    dir: (() => {
+      const d = (q.get('dir') || '').toLowerCase();
+      if (['left', 'right', 'forward', 'backward'].includes(d)) return d;
+      return q.get('mode') === 'warp' ? 'forward' : 'left';
+    })(),
     speed: num('speed', 1),
-    dir: q.get('dir') === 'right' ? 1 : -1,
     count: num('count', 0),
   };
 
@@ -60,8 +64,9 @@
     Math.max(x0, x1) >= cfg.x - m && Math.min(x0, x1) <= cfg.x + cfg.w + m &&
     Math.max(y0, y1) >= cfg.y - m && Math.min(y0, y1) <= cfg.y + cfg.h + m;
 
-  // ---------------- warp: flying forward, vanishing point between the TVs ----------------
+  // ---------------- warp: flying forward or backward, vanishing point between the TVs ----------------
   function warp() {
+    const fwd = cfg.dir !== 'backward';
     const N = cfg.count || Math.round(cfg.tw * cfg.th / 2500);
     const cx = cfg.tw / 2, cy = cfg.th / 2;
     const K = 0.45;                   // stars spawn within the central 45% and stream outward
@@ -73,9 +78,10 @@
       ctx.lineCap = 'round';
       for (let i = 0; i < N; i++) {
         const ux = hash(i, 1) * 2 - 1, uy = hash(i, 2) * 2 - 1;
-        const z = 1 - ((hash(i, 3) + t) % 1);      // 1 = far away, 0 = at the window
+        const cyc = (hash(i, 3) + t) % 1;
+        const z = fwd ? 1 - cyc : cyc;             // 1 = far away, 0 = at the window
         if (z < 0.02) continue;
-        const zp = Math.min(1, z + streak);
+        const zp = fwd ? Math.min(1, z + streak) : Math.max(0.02, z - streak); // where it was a moment ago
         const x = cx + ux * cx * K / z,  y = cy + uy * cy * K / z;
         const xp = cx + ux * cx * K / zp, yp = cy + uy * cy * K / zp;
         if (!onScreen(x, y, xp, yp, 8)) continue;
@@ -101,6 +107,7 @@
     ];
     const pick = r => { let acc = 0; for (const L of LAYERS) { acc += L.weight; if (r < acc) return L; } return LAYERS[LAYERS.length - 1]; };
     const base = 60 * cfg.speed; // px/s for the nearest layer
+    const sgn = cfg.dir === 'right' ? 1 : -1;
 
     // A faint nebula, painted once in virtual coordinates and scrolled behind everything.
     const neb = document.createElement('canvas');
@@ -139,12 +146,12 @@
     return () => {
       beginFrame();
       const T = Date.now() / 1000;
-      const nebOff = ((cfg.dir * base * 0.03 * T) % cfg.tw + cfg.tw) % cfg.tw;
+      const nebOff = ((sgn * base * 0.03 * T) % cfg.tw + cfg.tw) % cfg.tw;
       ctx.drawImage(neb, nebOff - cfg.tw, 0); ctx.drawImage(neb, nebOff, 0);
 
       for (let i = 0; i < N; i++) {
         const L = pick(hash(i, 5));
-        const v = cfg.dir * base * L.depth;
+        const v = sgn * base * L.depth;
         const x = ((hash(i, 1) * cfg.tw + v * T) % cfg.tw + cfg.tw) % cfg.tw;
         const y = hash(i, 2) * cfg.th;
         if (x < cfg.x - 4 || x > cfg.x + cfg.w + 4 || y < cfg.y - 4 || y > cfg.y + cfg.h + 4) continue;
@@ -157,7 +164,7 @@
 
       // Planets travel a long "lane" that is mostly off-screen, so they appear only now and then.
       for (const P of PLANETS) {
-        const v = cfg.dir * base * P.depth;
+        const v = sgn * base * P.depth;
         let x = ((P.x0 + v * T) % P.lane + P.lane) % P.lane - P.r * 2; // lane starts just left of the sky
         if (x > cfg.tw + P.r * 2) continue;
         if (!onScreen(x, P.y, x + P.r * 2, P.y + P.r * 2, 0)) continue;
@@ -166,7 +173,7 @@
     };
   }
 
-  const draw = cfg.mode === 'cruise' ? cruise() : warp();
+  const draw = (cfg.dir === 'forward' || cfg.dir === 'backward') ? warp() : cruise();
   (function loop() { draw(); requestAnimationFrame(loop); })();
 })();
 </script>

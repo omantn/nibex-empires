@@ -14,12 +14,12 @@ Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs d
 
 ### Starfield on the TVs (idle display)
 
-`stars/` holds a screensaver for the spaceship-window TVs: one shared sky rendered across every connected display, with parallax star layers, a drifting nebula and the occasional planet (or a forward-flying warp view). `setup-pi.sh` offers to install it as a second service, `nibex-stars`. Start it when the room is idle and stop it for game time:
+`stars/` holds a screensaver for the spaceship-window TVs: one shared sky rendered across every connected display, with a direction of travel: left or right gives parallax star layers, a drifting nebula and the occasional planet past side windows; forward or backward flies through a starfield whose vanishing point is the wall between the TVs. `setup-pi.sh` offers to install it as a second service, `nibex-stars`. Start it when the room is idle and stop it for game time:
 
     sudo systemctl start nibex-stars
     sudo systemctl stop nibex-stars
 
-Tweak `stars/stars.conf` (mode, speed, direction, wall gap, screen order) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
+Tweak `stars/stars.conf` (direction, speed, wall gap, screen order) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
 
 ## Before the event
 

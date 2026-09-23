@@ -121,26 +121,26 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   fi
   if ! command -v unclutter >/dev/null; then sudo apt-get install -y unclutter >/dev/null 2>&1 || true; fi
 
-  MODE=cruise; SPEED=1; DIRECTION=left; GAP=0; ORDER=normal; COUNT=
+  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; MODE=
   [ -f "$STARS_CONF" ] && . "$STARS_CONF"
-  echo "  1) cruise  - side windows: parallax star layers, nebula and the odd planet drift past"
-  echo "  2) warp    - flying forward: stars stream outward from between the TVs"
-  read -r -p "View [$([ "$MODE" = warp ] && echo 2 || echo 1)]: " m
-  case "${m:-}" in 2) MODE=warp ;; 1) MODE=cruise ;; esac
+  [ "$MODE" = warp ] && [ "$DIRECTION" = left ] && DIRECTION=forward
+  echo "Which way do the stars travel past the windows?"
+  echo "  left / right       side windows: parallax star layers, nebula and the odd planet drift past"
+  echo "  forward / backward flying: stars stream out from (or into) the wall between the TVs"
+  while :; do
+    read -r -p "Direction [$DIRECTION]: " v; v="${v:-$DIRECTION}"
+    case "$v" in left|right|forward|backward) DIRECTION="$v"; break ;; *) warn "Choose left, right, forward or backward." ;; esac
+  done
   read -r -p "Speed multiplier [$SPEED]: " v; SPEED="${v:-$SPEED}"
-  if [ "$MODE" = cruise ]; then
-    read -r -p "Stars travel left or right? [$DIRECTION]: " v; DIRECTION="${v:-$DIRECTION}"
-  fi
   echo "Wall between the TVs: stars cross it invisibly if you give its width in pixels."
   echo "  (wall width / one TV's width) x that TV's horizontal resolution, e.g. 6in/40in x 1920 = 288"
   read -r -p "Gap in pixels [$GAP]: " v; GAP="${v:-$GAP}"
-  printf 'MODE=%s
+  printf 'DIRECTION=%s
 SPEED=%s
-DIRECTION=%s
 GAP=%s
 ORDER=%s
 COUNT=%s
-' "$MODE" "$SPEED" "$DIRECTION" "$GAP" "$ORDER" "$COUNT" > "$STARS_CONF"
+' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" > "$STARS_CONF"
   chmod +x "$STARS_DIR/stars.sh"
 
   RUN_UID="$(id -u "$RUN_USER")"
@@ -179,7 +179,7 @@ UNITEOF
   echo "Starfield commands:"
   echo "  sudo systemctl start nibex-stars    (room idle: stars on the TVs)"
   echo "  sudo systemctl stop nibex-stars     (game time: back to the dashboard)"
-  echo "  edit stars/stars.conf then restart to tweak speed, direction, gap"
+  echo "  edit stars/stars.conf then restart to tweak direction, speed, gap"
 fi
 
 if systemctl is-active --quiet "$SERVICE"; then
