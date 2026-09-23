@@ -8,6 +8,10 @@ Run `Start-Nibex.ps1` in PowerShell. It asks for an admin password if ADMIN_PASS
 
 Alternatively, set ADMIN_PASSWORD in the process environment and run `npm start`. The default port is 3000. Set PORT to change it. PUBLIC_URL overrides the address encoded in the join QR code if the automatic LAN address picks the wrong adapter.
 
+### Raspberry Pi / Linux
+
+Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port. After a `git pull`, run `sudo systemctl restart nibex`.
+
 ## Before the event
 
 1. Download a backup from Admin before replacing an existing rehearsal. New game also takes a backup before clearing state.
