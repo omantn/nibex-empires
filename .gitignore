@@ -1,0 +1,6 @@
+node_modules/
+nibex.db
+nibex.db-wal
+nibex.db-shm
+backups/
+.claude/
