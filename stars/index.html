@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Nibex Stars</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+  // Every screen renders the SAME virtual sky, purely as a function of wall-clock time,
+  // then shows only its own slice. That keeps two kiosks in sync with no networking.
+  // Query params (all optional):
+  //   x,y,w,h   this screen's slice of the virtual canvas
+  //   tw,th     total virtual canvas size (all screens plus any wall gap)
+  //   mode      cruise (side windows, parallax layers drift past, default) | warp (flying forward)
+  //   speed     multiplier, default 1
+  //   dir       cruise only: left | right (direction stars travel)
+  //   count     override star count
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => { const v = parseFloat(q.get(k)); return Number.isFinite(v) ? v : d; };
+  const cfg = {
+    x: num('x', 0), y: num('y', 0),
+    w: num('w', innerWidth), h: num('h', innerHeight),
+    tw: num('tw', innerWidth), th: num('th', innerHeight),
+    mode: q.get('mode') === 'warp' ? 'warp' : 'cruise',
+    speed: num('speed', 1),
+    dir: q.get('dir') === 'right' ? 1 : -1,
+    count: num('count', 0),
+  };
+
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d', { alpha: false });
+  let W = 0, H = 0;
+  function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+  addEventListener('resize', resize);
+  resize();
+
+  // Deterministic per-star randomness so every screen computes an identical sky.
+  function hash(i, k) {
+    let h = (Math.imul(i + 1, 374761393) + Math.imul(k + 1, 668265263)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  const TINTS = ['255,255,255', '200,220,255', '255,235,200', '180,200,255'];
+  const tint = i => TINTS[Math.floor(hash(i, 9) * TINTS.length)];
+
+  // Draw in virtual coordinates; the transform maps our slice onto the canvas.
+  function beginFrame() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(W / cfg.w, 0, 0, H / cfg.h, -cfg.x * W / cfg.w, -cfg.y * H / cfg.h);
+  }
+  const onScreen = (x0, y0, x1, y1, m) =>
+    Math.max(x0, x1) >= cfg.x - m && Math.min(x0, x1) <= cfg.x + cfg.w + m &&
+    Math.max(y0, y1) >= cfg.y - m && Math.min(y0, y1) <= cfg.y + cfg.h + m;
+
+  // ---------------- warp: flying forward, vanishing point between the TVs ----------------
+  function warp() {
+    const N = cfg.count || Math.round(cfg.tw * cfg.th / 2500);
+    const cx = cfg.tw / 2, cy = cfg.th / 2;
+    const K = 0.45;                   // stars spawn within the central 45% and stream outward
+    const rate = 0.12 * cfg.speed;    // star lifetimes per second
+    const streak = 0.012 * cfg.speed; // how far back in z the motion streak reaches
+    return () => {
+      beginFrame();
+      const t = (Date.now() / 1000) * rate;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < N; i++) {
+        const ux = hash(i, 1) * 2 - 1, uy = hash(i, 2) * 2 - 1;
+        const z = 1 - ((hash(i, 3) + t) % 1);      // 1 = far away, 0 = at the window
+        if (z < 0.02) continue;
+        const zp = Math.min(1, z + streak);
+        const x = cx + ux * cx * K / z,  y = cy + uy * cy * K / z;
+        const xp = cx + ux * cx * K / zp, yp = cy + uy * cy * K / zp;
+        if (!onScreen(x, y, xp, yp, 8)) continue;
+        const near = 1 - z;
+        const a = Math.min(1, near * 1.6) * (0.55 + 0.45 * hash(i, 4));
+        ctx.strokeStyle = `rgba(${tint(i)},${a.toFixed(3)})`;
+        ctx.lineWidth = 0.6 + 2.4 * near * near;
+        ctx.beginPath(); ctx.moveTo(xp, yp); ctx.lineTo(x, y); ctx.stroke();
+      }
+    };
+  }
+
+  // ---------------- cruise: side windows, parallax layers drifting past ----------------
+  function cruise() {
+    const N = cfg.count || Math.round(cfg.tw * cfg.th / 2200);
+    // depth = parallax factor (1 = nearest, moves fastest). Weights bias stars toward the far layers.
+    const LAYERS = [
+      { depth: 0.06, size: 0.8, alpha: 0.30, weight: 0.34 },
+      { depth: 0.14, size: 1.0, alpha: 0.45, weight: 0.28 },
+      { depth: 0.30, size: 1.4, alpha: 0.65, weight: 0.20 },
+      { depth: 0.55, size: 2.0, alpha: 0.85, weight: 0.12 },
+      { depth: 1.00, size: 3.0, alpha: 1.00, weight: 0.06 },
+    ];
+    const pick = r => { let acc = 0; for (const L of LAYERS) { acc += L.weight; if (r < acc) return L; } return LAYERS[LAYERS.length - 1]; };
+    const base = 60 * cfg.speed; // px/s for the nearest layer
+
+    // A faint nebula, painted once in virtual coordinates and scrolled behind everything.
+    const neb = document.createElement('canvas');
+    neb.width = cfg.tw; neb.height = cfg.th;
+    const nc = neb.getContext('2d');
+    const COLORS = ['90,60,160', '40,90,170', '150,50,110', '50,120,140', '120,70,150'];
+    for (let i = 0; i < 9; i++) {
+      const gx = hash(i, 21) * cfg.tw, gy = hash(i, 22) * cfg.th;
+      const r = (0.25 + 0.4 * hash(i, 23)) * cfg.th;
+      const c = COLORS[i % COLORS.length];
+      for (const dx of [0, gx < cfg.tw / 2 ? cfg.tw : -cfg.tw]) { // mirror across the wrap seam
+        const g = nc.createRadialGradient(gx + dx, gy, 0, gx + dx, gy, r);
+        g.addColorStop(0, `rgba(${c},0.18)`); g.addColorStop(1, `rgba(${c},0)`);
+        nc.fillStyle = g; nc.fillRect(gx + dx - r, gy - r, r * 2, r * 2);
+      }
+    }
+
+    // Planets: pre-rendered sprites that drift by on the near layers, one every few minutes.
+    const PLANETS = [];
+    for (let j = 0; j < 4; j++) {
+      const r = (0.12 + 0.3 * hash(j, 31)) * cfg.th;
+      const pc = document.createElement('canvas'); pc.width = pc.height = Math.ceil(r * 2 + 4);
+      const p = pc.getContext('2d'), c = COLORS[(j + 2) % COLORS.length];
+      const light = p.createRadialGradient(r * 0.6, r * 0.6, r * 0.1, r + 2, r + 2, r);
+      light.addColorStop(0, `rgba(${c},0.95)`); light.addColorStop(0.7, `rgba(${c},0.55)`); light.addColorStop(1, 'rgba(0,0,0,1)');
+      p.fillStyle = light; p.beginPath(); p.arc(r + 2, r + 2, r, 0, 6.283); p.fill();
+      for (let b = 0; b < 6; b++) { // faint bands
+        p.fillStyle = `rgba(0,0,0,${(0.05 + 0.1 * hash(j * 8 + b, 33)).toFixed(2)})`;
+        p.fillRect(0, (0.2 + 0.6 * hash(j * 8 + b, 34)) * r * 2, r * 2 + 4, 2 + 6 * hash(j * 8 + b, 35));
+      }
+      p.globalCompositeOperation = 'destination-in'; p.beginPath(); p.arc(r + 2, r + 2, r, 0, 6.283); p.fill();
+      const depth = 0.5 + 0.5 * hash(j, 36);
+      PLANETS.push({ sprite: pc, r, depth, lane: cfg.tw * (4 + 4 * hash(j, 37)), y: (0.1 + 0.8 * hash(j, 38)) * cfg.th - r, x0: hash(j, 39) * cfg.tw * 8 });
+    }
+
+    return () => {
+      beginFrame();
+      const T = Date.now() / 1000;
+      const nebOff = ((cfg.dir * base * 0.03 * T) % cfg.tw + cfg.tw) % cfg.tw;
+      ctx.drawImage(neb, nebOff - cfg.tw, 0); ctx.drawImage(neb, nebOff, 0);
+
+      for (let i = 0; i < N; i++) {
+        const L = pick(hash(i, 5));
+        const v = cfg.dir * base * L.depth;
+        const x = ((hash(i, 1) * cfg.tw + v * T) % cfg.tw + cfg.tw) % cfg.tw;
+        const y = hash(i, 2) * cfg.th;
+        if (x < cfg.x - 4 || x > cfg.x + cfg.w + 4 || y < cfg.y - 4 || y > cfg.y + cfg.h + 4) continue;
+        const twk = 0.75 + 0.25 * Math.sin(T * (0.6 + 1.6 * hash(i, 6)) + hash(i, 7) * 6.283);
+        const s = L.size * (0.7 + 0.6 * hash(i, 8));
+        ctx.fillStyle = `rgba(${tint(i)},${(L.alpha * twk).toFixed(3)})`;
+        if (s < 1.6) ctx.fillRect(x - s / 2, y - s / 2, s, s);
+        else { ctx.beginPath(); ctx.arc(x, y, s / 2, 0, 6.283); ctx.fill(); }
+      }
+
+      // Planets travel a long "lane" that is mostly off-screen, so they appear only now and then.
+      for (const P of PLANETS) {
+        const v = cfg.dir * base * P.depth;
+        let x = ((P.x0 + v * T) % P.lane + P.lane) % P.lane - P.r * 2; // lane starts just left of the sky
+        if (x > cfg.tw + P.r * 2) continue;
+        if (!onScreen(x, P.y, x + P.r * 2, P.y + P.r * 2, 0)) continue;
+        ctx.drawImage(P.sprite, x, P.y);
+      }
+    };
+  }
+
+  const draw = cfg.mode === 'cruise' ? cruise() : warp();
+  (function loop() { draw(); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>

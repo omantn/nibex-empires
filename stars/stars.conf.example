@@ -1,0 +1,6 @@
+MODE=cruise
+SPEED=1
+DIRECTION=left
+GAP=0
+ORDER=normal
+COUNT=

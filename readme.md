@@ -12,6 +12,15 @@ Alternatively, set ADMIN_PASSWORD in the process environment and run `npm start`
 
 Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port. After a `git pull`, run `sudo systemctl restart nibex`.
 
+### Starfield on the TVs (idle display)
+
+`stars/` holds a screensaver for the spaceship-window TVs: one shared sky rendered across every connected display, with parallax star layers, a drifting nebula and the occasional planet (or a forward-flying warp view). `setup-pi.sh` offers to install it as a second service, `nibex-stars`. Start it when the room is idle and stop it for game time:
+
+    sudo systemctl start nibex-stars
+    sudo systemctl stop nibex-stars
+
+Tweak `stars/stars.conf` (mode, speed, direction, wall gap, screen order) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
+
 ## Before the event
 
 1. Download a backup from Admin before replacing an existing rehearsal. New game also takes a backup before clearing state.

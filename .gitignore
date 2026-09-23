@@ -4,3 +4,4 @@ nibex.db-wal
 nibex.db-shm
 backups/
 .claude/
+stars/stars.conf

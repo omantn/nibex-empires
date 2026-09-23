@@ -108,6 +108,80 @@ sudo systemctl enable "$SERVICE" >/dev/null
 sudo systemctl restart "$SERVICE"
 sleep 2
 
+# ---------- Starfield display (optional second service) ----------
+say "Starfield display for the TVs (optional)"
+read -r -p "Set up the starfield screensaver service (nibex-stars)? [y/N] " ans
+if [[ "${ans:-N}" =~ ^[Yy] ]]; then
+  STARS_DIR="$APP_DIR/stars"
+  STARS_CONF="$STARS_DIR/stars.conf"
+  STARS_UNIT=/etc/systemd/system/nibex-stars.service
+  if ! command -v chromium >/dev/null && ! command -v chromium-browser >/dev/null; then
+    say "Installing Chromium"
+    sudo apt-get install -y chromium 2>/dev/null || sudo apt-get install -y chromium-browser
+  fi
+  if ! command -v unclutter >/dev/null; then sudo apt-get install -y unclutter >/dev/null 2>&1 || true; fi
+
+  MODE=cruise; SPEED=1; DIRECTION=left; GAP=0; ORDER=normal; COUNT=
+  [ -f "$STARS_CONF" ] && . "$STARS_CONF"
+  echo "  1) cruise  - side windows: parallax star layers, nebula and the odd planet drift past"
+  echo "  2) warp    - flying forward: stars stream outward from between the TVs"
+  read -r -p "View [$([ "$MODE" = warp ] && echo 2 || echo 1)]: " m
+  case "${m:-}" in 2) MODE=warp ;; 1) MODE=cruise ;; esac
+  read -r -p "Speed multiplier [$SPEED]: " v; SPEED="${v:-$SPEED}"
+  if [ "$MODE" = cruise ]; then
+    read -r -p "Stars travel left or right? [$DIRECTION]: " v; DIRECTION="${v:-$DIRECTION}"
+  fi
+  echo "Wall between the TVs: stars cross it invisibly if you give its width in pixels."
+  echo "  (wall width / one TV's width) x that TV's horizontal resolution, e.g. 6in/40in x 1920 = 288"
+  read -r -p "Gap in pixels [$GAP]: " v; GAP="${v:-$GAP}"
+  printf 'MODE=%s
+SPEED=%s
+DIRECTION=%s
+GAP=%s
+ORDER=%s
+COUNT=%s
+' "$MODE" "$SPEED" "$DIRECTION" "$GAP" "$ORDER" "$COUNT" > "$STARS_CONF"
+  chmod +x "$STARS_DIR/stars.sh"
+
+  RUN_UID="$(id -u "$RUN_USER")"
+  XAUTH_LINE=""
+  [ -f "/home/$RUN_USER/.Xauthority" ] && XAUTH_LINE="Environment=XAUTHORITY=/home/$RUN_USER/.Xauthority"
+  say "Writing $STARS_UNIT"
+  sudo tee "$STARS_UNIT" >/dev/null <<UNITEOF
+[Unit]
+Description=Nibex starfield on the TVs
+After=graphical.target
+Wants=graphical.target
+
+[Service]
+User=${RUN_USER}
+WorkingDirectory=${STARS_DIR}
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/${RUN_UID}
+${XAUTH_LINE}
+ExecStart=${STARS_DIR}/stars.sh
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+UNITEOF
+  sudo systemctl daemon-reload
+  read -r -p "Start the starfield automatically at boot? [y/N] " v
+  if [[ "${v:-N}" =~ ^[Yy] ]]; then sudo systemctl enable nibex-stars >/dev/null; else sudo systemctl disable nibex-stars >/dev/null 2>&1 || true; fi
+  read -r -p "Start it on the TVs now? [Y/n] " v
+  if [[ "${v:-Y}" =~ ^[Yy] ]]; then
+    sudo systemctl restart nibex-stars; sleep 4
+    if systemctl is-active --quiet nibex-stars; then echo "Starfield is running."; else warn "Starfield failed to start:"; sudo journalctl -u nibex-stars -n 20 --no-pager; fi
+  fi
+  echo
+  echo "Starfield commands:"
+  echo "  sudo systemctl start nibex-stars    (room idle: stars on the TVs)"
+  echo "  sudo systemctl stop nibex-stars     (game time: back to the dashboard)"
+  echo "  edit stars/stars.conf then restart to tweak speed, direction, gap"
+fi
+
 if systemctl is-active --quiet "$SERVICE"; then
   ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   say "Nibex is running."
