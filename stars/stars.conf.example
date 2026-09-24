@@ -4,3 +4,5 @@ GAP=0
 ORDER=normal
 COUNT=
 SCALE=1
+SIZE=1
+FPS=30
