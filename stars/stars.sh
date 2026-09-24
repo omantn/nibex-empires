@@ -69,6 +69,11 @@ for g in "${SCREENS[@]}"; do
 done
 TW=$((TW + GAP * (${#SCREENS[@]} - 1)))
 
+# Clear out any kiosks left over from a previous run. Chromium refuses to start while its
+# profile folder is locked by an instance that is still shutting down.
+pkill -f 'user-data-dir=/tmp/nibex-stars-' 2>/dev/null && sleep 2
+rm -f /tmp/nibex-stars-*/Singleton* 2>/dev/null
+
 # Keep the screens from blanking while the stars are up (X11 only; harmless elsewhere).
 xset s off -dpms 2>/dev/null; xset s noblank 2>/dev/null
 command -v unclutter >/dev/null && unclutter -idle 0 -root >/dev/null 2>&1 &
