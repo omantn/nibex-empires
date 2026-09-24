@@ -121,7 +121,7 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   fi
   if ! command -v unclutter >/dev/null; then sudo apt-get install -y unclutter >/dev/null 2>&1 || true; fi
 
-  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; SCALE=1; SIZE=1; FPS=30; MODE=
+  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; SCALE=1; SIZE=1; FPS=30; RESOLUTION=; MODE=
   [ -f "$STARS_CONF" ] && . "$STARS_CONF"
   [ "$MODE" = warp ] && [ "$DIRECTION" = left ] && DIRECTION=forward
   echo "Which way do the stars travel past the windows?"
@@ -138,6 +138,9 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   read -r -p "Render scale, 1 = full resolution, 0.5 = half (smoother on a slow Pi) [$SCALE]: " v; SCALE="${v:-$SCALE}"
   read -r -p "Star size multiplier, e.g. 1.5 for bigger, fewer stars [$SIZE]: " v; SIZE="${v:-$SIZE}"
   read -r -p "Frame-rate cap, 30 is smooth and easy on the Pi [$FPS]: " v; FPS="${v:-$FPS}"
+  echo "If the TVs are 4K, force them to 1080p: a Pi cannot composite two 4K desktops smoothly."
+  read -r -p "Output resolution to force, e.g. 1920x1080 (blank = leave as is) [$RESOLUTION]: " v; RESOLUTION="${v:-$RESOLUTION}"
+  [ -n "$RESOLUTION" ] && ! command -v wlr-randr >/dev/null && sudo apt-get install -y wlr-randr >/dev/null 2>&1 || true
   printf 'DIRECTION=%s
 SPEED=%s
 GAP=%s
@@ -146,7 +149,8 @@ COUNT=%s
 SCALE=%s
 SIZE=%s
 FPS=%s
-' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" "$SCALE" "$SIZE" "$FPS" > "$STARS_CONF"
+RESOLUTION=%s
+' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" "$SCALE" "$SIZE" "$FPS" "$RESOLUTION" > "$STARS_CONF"
   chmod +x "$STARS_DIR/stars.sh"
 
   RUN_UID="$(id -u "$RUN_USER")"

@@ -13,6 +13,7 @@ COUNT=           # override star count (blank = automatic)
 SCALE=1          # render resolution factor: 0.5 = half-res upscaled (try this if the Pi still stutters)
 SIZE=1           # star size multiplier (bigger stars = fewer stars)
 FPS=30           # frame-rate cap; 30 halves the GPU/compositor load and looks smooth for slow drift
+RESOLUTION=      # e.g. 1920x1080: switch every TV to this mode before launching (blank = leave as is)
 [ -f "$DIR/stars.conf" ] && . "$DIR/stars.conf"
 
 export DISPLAY="${DISPLAY:-:0}"
@@ -25,9 +26,37 @@ done
 for _ in $(seq 1 60); do xrandr -q >/dev/null 2>&1 && break; sleep 2; done
 xrandr -q >/dev/null 2>&1 || { echo "No display server reachable on $DISPLAY" >&2; exit 1; }
 
+# Optionally force an output mode. A Pi cannot composite two 4K desktops smoothly; 1080p on a
+# 4K TV is upscaled by the TV and is indistinguishable from across a room.
+if [ -n "$RESOLUTION" ]; then
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    for s in wayland-0 wayland-1; do [ -S "$XDG_RUNTIME_DIR/$s" ] && export WAYLAND_DISPLAY="$s" && break; done
+  fi
+  if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wlr-randr >/dev/null; then
+    for out in $(wlr-randr 2>/dev/null | awk '/^[A-Za-z]/ {print $1}'); do
+      echo "wlr-randr: $out -> $RESOLUTION"; wlr-randr --output "$out" --mode "$RESOLUTION" 2>&1 | head -2
+    done
+  elif command -v xrandr >/dev/null; then
+    for out in $(xrandr -q | awk '/ connected/ {print $1}'); do
+      echo "xrandr: $out -> $RESOLUTION"; xrandr --output "$out" --mode "$RESOLUTION" 2>&1 | head -2
+    done
+  else
+    echo "RESOLUTION is set but neither wlr-randr nor xrandr is available (sudo apt install wlr-randr)" >&2
+  fi
+  sleep 3
+fi
+
 # Connected outputs as WxH+X+Y, ordered left to right on the desktop.
 mapfile -t SCREENS < <(xrandr -q | awk '/ connected/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$/) { print $i; break } }' | sort -t+ -k2,2n)
 [ "${#SCREENS[@]}" -gt 0 ] || { echo "No connected displays found" >&2; exit 1; }
+echo "displays: ${SCREENS[*]}"
+for g in "${SCREENS[@]}"; do
+  if [ "${g%%x*}" -gt 2560 ]; then
+    echo "WARNING: ${g%%x*}px-wide output detected. A Pi cannot drive two 4K desktops smoothly; set RESOLUTION=1920x1080 in stars.conf." >&2
+    break
+  fi
+done
 [ "$ORDER" = reverse ] && mapfile -t SCREENS < <(printf '%s\n' "${SCREENS[@]}" | tac)
 
 # Virtual sky: all screens side by side with GAP pixels of wall between them.

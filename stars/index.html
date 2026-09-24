@@ -47,7 +47,7 @@
   };
 
   const cv = document.getElementById('c');
-  const gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
   if (!gl) { document.body.innerHTML = '<div id="msg">WebGL is not available in this browser.</div>'; return; }
 
   function resize() {
@@ -232,8 +232,10 @@
 
     // Nebula: painted once at reduced resolution, scrolled as two textured quads (wraps seamlessly).
     // Each cloud is a cluster of overlapping soft blobs with a bell-shaped falloff, so it reads as
-    // haze rather than a disc. Drawn at low res and blurred by the GPU's linear upscale.
-    const nw = Math.min(1024, cfg.tw), nh = Math.round(nw * cfg.th / cfg.tw), sx = nw / cfg.tw;
+    // haze rather than a disc. Painted at roughly half the sky's real pixel width (capped by the GPU's
+    // texture limit) so the upscale stays gentle and never turns blocky.
+    const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048;
+    const nw = Math.min(maxTex, 4096, Math.max(1024, Math.round(cfg.tw * cfg.scale * 0.6))), nh = Math.round(nw * cfg.th / cfg.tw), sx = nw / cfg.tw;
     const neb = document.createElement('canvas'); neb.width = nw; neb.height = nh;
     const nc = neb.getContext('2d');
     const blob = (x, y, r, c, a) => {
