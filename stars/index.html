@@ -12,6 +12,14 @@
 <body>
 <canvas id="c"></canvas>
 <script>
+// Any failure (shader compile, WebGL missing) is printed on screen so a black kiosk explains itself.
+function showError(msg) {
+  let el = document.getElementById('msg');
+  if (!el) { el = document.createElement('pre'); el.id = 'msg'; el.style.cssText = 'position:fixed;top:0;left:0;color:#f66;background:#000;font:16px monospace;padding:1em;white-space:pre-wrap;max-width:100vw;z-index:9'; document.body.appendChild(el); }
+  el.textContent += msg + '\n';
+}
+window.addEventListener('error', e => showError('Error: ' + (e.message || e.error)));
+try {
 (() => {
   // Every screen renders the SAME virtual sky as a pure function of wall-clock time and shows
   // only its own slice, so two kiosks stay in sync with no networking. All per-star motion is
@@ -357,6 +365,7 @@
     draw();
   })(0);
 })();
+} catch (e) { showError('Startup failed: ' + (e && e.message ? e.message : e)); }
 </script>
 </body>
 </html>
