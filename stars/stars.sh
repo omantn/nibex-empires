@@ -14,6 +14,8 @@ SCALE=1          # render resolution factor: 0.5 = half-res upscaled (try this i
 SIZE=1           # star size multiplier (bigger stars = fewer stars)
 FPS=30           # frame-rate cap; 30 halves the GPU/compositor load and looks smooth for slow drift
 RESOLUTION=      # e.g. 1920x1080: switch every TV to this mode before launching (blank = leave as is)
+NEBULA=1         # nebula brightness multiplier (0 = none)
+SEED=7           # nebula shape seed; change for a different sky
 [ -f "$DIR/stars.conf" ] && . "$DIR/stars.conf"
 
 export DISPLAY="${DISPLAY:-:0}"
@@ -75,7 +77,7 @@ trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM INT EXIT
 VX=0; i=0
 for g in "${SCREENS[@]}"; do
   w=${g%%x*}; rest=${g#*x}; h=${rest%%+*}; rest=${rest#*+}; px=${rest%%+*}; py=${rest#*+}
-  url="file://$DIR/index.html?x=$VX&y=0&w=$w&h=$h&tw=$TW&th=$TH&dir=$DIRECTION&speed=$SPEED&scale=$SCALE&size=$SIZE&fps=$FPS${COUNT:+&count=$COUNT}"
+  url="file://$DIR/index.html?x=$VX&y=0&w=$w&h=$h&tw=$TW&th=$TH&dir=$DIRECTION&speed=$SPEED&scale=$SCALE&size=$SIZE&fps=$FPS&nebula=$NEBULA&seed=$SEED${COUNT:+&count=$COUNT}"
   echo "screen $i: $g -> $url"
   "$CHROME" --ozone-platform=x11 --kiosk --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --window-position="$px,$py" --window-size="$w,$h" \
     --user-data-dir="/tmp/nibex-stars-$i" --no-first-run --noerrdialogs --disable-infobars \

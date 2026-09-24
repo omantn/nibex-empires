@@ -10,6 +10,8 @@ param(
     [double]$Scale = 1,
     [double]$Size = 1,
     [int]$Fps = 60,
+    [double]$Nebula = 1,
+    [int]$Seed = 7,
     [int]$Width = 960,
     [int]$Height = 540,
     [switch]$Single
@@ -21,16 +23,16 @@ $browser = @(
     "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
     "${env:LOCALAPPDATA}\Google\Chrome\Application\chrome.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $browser) { Start-Process "${page}?dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps"; return }
+if (-not $browser) { Start-Process "${page}?dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps&nebula=$Nebula&seed=$Seed"; return }
 
 if ($Single) {
-    & $browser --new-window --app="${page}?dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps" --user-data-dir="$env:TEMP\nibex-stars-preview"
+    & $browser --new-window --app="${page}?dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps&nebula=$Nebula&seed=$Seed" --user-data-dir="$env:TEMP\nibex-stars-preview"
     return
 }
 $tw = $Width * 2 + $Gap
 $common = @('--new-window', '--no-first-run', "--window-size=$Width,$($Height + 40)")
 & $browser @common --window-position=20,80 --user-data-dir="$env:TEMP\nibex-stars-preview0" `
-    --app="${page}?x=0&y=0&w=$Width&h=$Height&tw=$tw&th=$Height&dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps"
+    --app="${page}?x=0&y=0&w=$Width&h=$Height&tw=$tw&th=$Height&dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps&nebula=$Nebula&seed=$Seed"
 & $browser @common --window-position=$($Width + 40),80 --user-data-dir="$env:TEMP\nibex-stars-preview1" `
-    --app="${page}?x=$($Width + $Gap)&y=0&w=$Width&h=$Height&tw=$tw&th=$Height&dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps"
+    --app="${page}?x=$($Width + $Gap)&y=0&w=$Width&h=$Height&tw=$tw&th=$Height&dir=$Direction&speed=$Speed&scale=$Scale&size=$Size&fps=$Fps&nebula=$Nebula&seed=$Seed"
 Write-Host "Two windows opened as the left and right TVs. Close them when done."

@@ -174,7 +174,7 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   fi
   if ! command -v unclutter >/dev/null; then sudo apt-get install -y unclutter >/dev/null 2>&1 || true; fi
 
-  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; SCALE=1; SIZE=1; FPS=30; RESOLUTION=; MODE=
+  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; SCALE=1; SIZE=1; FPS=30; RESOLUTION=; NEBULA=1; SEED=7; MODE=
   [ -f "$STARS_CONF" ] && . "$STARS_CONF"
   [ "$MODE" = warp ] && [ "$DIRECTION" = left ] && DIRECTION=forward
   echo "Which way do the stars travel past the windows?"
@@ -203,7 +203,9 @@ SCALE=%s
 SIZE=%s
 FPS=%s
 RESOLUTION=%s
-' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" "$SCALE" "$SIZE" "$FPS" "$RESOLUTION" > "$STARS_CONF"
+NEBULA=%s
+SEED=%s
+' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" "$SCALE" "$SIZE" "$FPS" "$RESOLUTION" "$NEBULA" "$SEED" > "$STARS_CONF"
   chmod +x "$STARS_DIR/stars.sh"
 
   RUN_UID="$(id -u "$RUN_USER")"
