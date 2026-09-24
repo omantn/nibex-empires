@@ -44,6 +44,14 @@ if ! dpkg -s build-essential >/dev/null 2>&1 || ! command -v python3 >/dev/null;
   sudo apt-get install -y build-essential python3
 fi
 
+# ---------- Fonts ----------
+# The dashboard draws ore/food/relic icons and ticker glyphs with emoji; without a colour emoji
+# font the Pi's Chromium shows empty boxes.
+if ! fc-list 2>/dev/null | grep -qi 'NotoColorEmoji'; then
+  say "Installing the colour emoji font for the TV dashboard"
+  sudo apt-get install -y fonts-noto-color-emoji >/dev/null 2>&1 || warn "Could not install fonts-noto-color-emoji; map icons may show as boxes."
+fi
+
 # ---------- Dependencies ----------
 say "Installing npm dependencies"
 cd "$APP_DIR"
@@ -59,6 +67,7 @@ existing_port=""
 if [ -f "$UNIT" ]; then
   existing_pw="$(sudo grep -oP '^Environment=ADMIN_PASSWORD=\K.*' "$UNIT" || true)"
   existing_port="$(sudo grep -oP '^Environment=PORT=\K.*' "$UNIT" || true)"
+  existing_inset="$(sudo grep -oP '^Environment=DASHBOARD_INSET=\K.*' "$UNIT" || true)"
 fi
 
 while :; do
@@ -80,6 +89,12 @@ read -r -p "Port [${existing_port:-3000}]: " port
 port="${port:-${existing_port:-3000}}"
 [[ "$port" =~ ^[0-9]+$ ]] || die "Port must be a number."
 
+echo "If a bezel or a decorative frame hides the edges of the TV, the dashboard can keep a margin clear."
+echo "  One number for all sides (e.g. 60), or top,right,bottom,left (e.g. 50,80,50,80). 0 = none."
+read -r -p "Dashboard safe-area inset in pixels [${existing_inset:-0}]: " inset
+inset="${inset:-${existing_inset:-0}}"
+[[ "$inset" =~ ^[0-9]{1,4}(,[0-9]{1,4}){0,3}$ ]] || die "Inset must be numbers like 60 or 50,80,50,80."
+
 # ---------- systemd unit ----------
 say "Writing $UNIT"
 sudo tee "$UNIT" >/dev/null <<UNITEOF
@@ -93,6 +108,7 @@ User=${RUN_USER}
 WorkingDirectory=${APP_DIR}
 Environment=ADMIN_PASSWORD=${pw}
 Environment=PORT=${port}
+Environment=DASHBOARD_INSET=${inset}
 ExecStart=${NODE_BIN} server.js
 Restart=always
 RestartSec=3

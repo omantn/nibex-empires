@@ -14,7 +14,7 @@ import {
   findPlayerByAbbrPin, sendMessage, getThread, proposePact, respondPact, withdrawPact, startFinale,
   exchange, pauseGame, resumeGame,
 } from './src/game.js'
-import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage } from './src/views.js'
+import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage, parseInset } from './src/views.js'
 
 const PORT = Number(process.env.PORT ?? 3000)
 const app = express()
@@ -41,9 +41,13 @@ const joinUrl = process.env.PUBLIC_URL ? new URL('/join', process.env.PUBLIC_URL
 
 app.get('/', (_req, res) => res.redirect('/dashboard'))
 
-app.get('/dashboard', async (_req, res) => {
+// Safe-area inset for TVs whose bezel or a decorative frame hides the edges of the picture.
+// DASHBOARD_INSET sets the default (e.g. "60" or "40,80"); ?inset= on the URL overrides it.
+const DASHBOARD_INSET = parseInset(process.env.DASHBOARD_INSET)
+app.get('/dashboard', async (req, res) => {
   const qr = await QRCode.toDataURL(joinUrl, { margin: 1, width: 440 })
-  res.send(dashboardPage(publicState(), joinUrl, qr, recentEvents()))
+  const inset = req.query.inset != null ? parseInset(req.query.inset) : DASHBOARD_INSET
+  res.send(dashboardPage(publicState(), joinUrl, qr, recentEvents(), inset))
 })
 
 // Founding is open in the lobby; after launch it needs the admin toggle.

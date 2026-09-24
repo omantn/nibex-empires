@@ -212,7 +212,10 @@ const TV_CSS = `
   @keyframes crawl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 `
 
-export function dashboardPage(state, joinUrl, qrDataUrl, events) {
+// inset: CSS padding (1-4 px values) that keeps the whole dashboard clear of a TV bezel or a
+// decorative frame around the screen. Comes from DASHBOARD_INSET or ?inset=.
+export function dashboardPage(state, joinUrl, qrDataUrl, events, inset = '') {
+  const insetCss = inset ? `.tv { padding: ${inset}; box-sizing: border-box; }` : ''
   const body = `
   <div class="tv">
     <div class="tv-head">
@@ -427,7 +430,14 @@ export function dashboardPage(state, joinUrl, qrDataUrl, events) {
     }, 250);
     render();
     renderTicker();`
-  return layout('Nibex: Empires — Dashboard', body, script, { css: TV_CSS, bare: true })
+  return layout('Nibex: Empires — Dashboard', body, script, { css: TV_CSS + insetCss, bare: true })
+}
+
+// "60" -> "60px", "40,80" -> "40px 80px", up to four values like CSS padding. Anything else -> ''.
+export function parseInset(raw) {
+  const parts = String(raw ?? '').trim().split(/[\s,]+/).filter(Boolean)
+  if (!parts.length || parts.length > 4 || !parts.every((p) => /^\d{1,4}$/.test(p))) return ''
+  return parts.map((p) => p + 'px').join(' ')
 }
 
 export function joinPage({ error = '', loginError = '', canCreate = true } = {}) {

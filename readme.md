@@ -12,6 +12,10 @@ Alternatively, set ADMIN_PASSWORD in the process environment and run `npm start`
 
 Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port. After a `git pull`, run `sudo systemctl restart nibex`.
 
+### TV frame and icons
+
+If a bezel or decorative frame hides the edges of the TV, set a safe-area inset: `./dashboard-inset.sh 60` (or `50,80,50,80` for top,right,bottom,left). Try values live with `/dashboard?inset=60` first. The same script installs the colour emoji font the map icons and ticker need on a Pi.
+
 ### Starfield on the TVs (idle display)
 
 `stars/` holds a screensaver for the spaceship-window TVs: one shared sky rendered across every connected display, with a direction of travel: left or right gives parallax star layers, a drifting nebula and the occasional planet past side windows; forward or backward flies through a starfield whose vanishing point is the wall between the TVs. `setup-pi.sh` offers to install it as a second service, `nibex-stars`. Start it when the room is idle and stop it for game time:
