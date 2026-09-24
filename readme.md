@@ -19,7 +19,7 @@ Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs d
     sudo systemctl start nibex-stars
     sudo systemctl stop nibex-stars
 
-Tweak `stars/stars.conf` (direction, speed, wall gap, screen order) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
+The sky is drawn with WebGL, so the Pi's GPU does the work. Tweak `stars/stars.conf` (direction, speed, wall gap, screen order, render scale) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
 
 ## Before the event
 

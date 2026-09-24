@@ -5,15 +5,18 @@
 <title>Nibex Stars</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
-  canvas { display: block; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #msg { color: #888; font: 16px sans-serif; padding: 2em; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <script>
 (() => {
-  // Every screen renders the SAME virtual sky, purely as a function of wall-clock time,
-  // then shows only its own slice. That keeps two kiosks in sync with no networking.
+  // Every screen renders the SAME virtual sky as a pure function of wall-clock time and shows
+  // only its own slice, so two kiosks stay in sync with no networking. All per-star motion is
+  // computed on the GPU in vertex shaders; the CPU only updates a few uniforms per frame.
+  //
   // Query params (all optional):
   //   x,y,w,h   this screen's slice of the virtual canvas
   //   tw,th     total virtual canvas size (all screens plus any wall gap)
@@ -22,6 +25,7 @@
   //   mode      legacy alias: cruise = left, warp = forward (dir wins if both given)
   //   speed     multiplier, default 1
   //   count     override star count
+  //   scale     render resolution factor (0.5 = half-res, upscaled; helps slow GPUs)
   const q = new URLSearchParams(location.search);
   const num = (k, d) => { const v = parseFloat(q.get(k)); return Number.isFinite(v) ? v : d; };
   const cfg = {
@@ -35,12 +39,18 @@
     })(),
     speed: num('speed', 1),
     count: num('count', 0),
+    scale: Math.min(1, Math.max(0.25, num('scale', 1))),
   };
 
   const cv = document.getElementById('c');
-  const ctx = cv.getContext('2d', { alpha: false });
-  let W = 0, H = 0;
-  function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+  const gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+  if (!gl) { document.body.innerHTML = '<div id="msg">WebGL is not available in this browser.</div>'; return; }
+
+  function resize() {
+    cv.width = Math.max(1, Math.round(innerWidth * cfg.scale));
+    cv.height = Math.max(1, Math.round(innerHeight * cfg.scale));
+    gl.viewport(0, 0, cv.width, cv.height);
+  }
   addEventListener('resize', resize);
   resize();
 
@@ -50,131 +60,235 @@
     h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
-  const TINTS = ['255,255,255', '200,220,255', '255,235,200', '180,200,255'];
-  const tint = i => TINTS[Math.floor(hash(i, 9) * TINTS.length)];
+  const TINTS = [[1, 1, 1], [0.78, 0.86, 1], [1, 0.92, 0.78], [0.7, 0.78, 1]];
+  const NEB_COLORS = ['90,60,160', '40,90,170', '150,50,110', '50,120,140', '120,70,150'];
 
-  // Draw in virtual coordinates; the transform maps our slice onto the canvas.
-  function beginFrame() {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.setTransform(W / cfg.w, 0, 0, H / cfg.h, -cfg.x * W / cfg.w, -cfg.y * H / cfg.h);
+  // ---------------- GL helpers ----------------
+  function program(vs, fs) {
+    const mk = (type, src) => {
+      const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+      return sh;
+    };
+    const p = gl.createProgram();
+    gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}, a = {};
+    for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) { const n = gl.getActiveUniform(p, i).name.replace('[0]', ''); u[n] = gl.getUniformLocation(p, n); }
+    for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES); i++) { const n = gl.getActiveAttrib(p, i).name; a[n] = gl.getAttribLocation(p, n); }
+    return { p, u, a };
   }
-  const onScreen = (x0, y0, x1, y1, m) =>
-    Math.max(x0, x1) >= cfg.x - m && Math.min(x0, x1) <= cfg.x + cfg.w + m &&
-    Math.max(y0, y1) >= cfg.y - m && Math.min(y0, y1) <= cfg.y + cfg.h + m;
+  function buffer(data, target) {
+    target = target || gl.ARRAY_BUFFER;
+    const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW); return b;
+  }
+  function texture(canvas) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  // Virtual sky coords -> clip space for this screen's slice.
+  const CLIP = `
+    uniform vec4 u_slice; // x, y, w, h of this screen within the virtual sky
+    vec4 clip(vec2 v) { vec2 n = (v - u_slice.xy) / u_slice.zw; return vec4(n.x * 2.0 - 1.0, 1.0 - n.y * 2.0, 0.0, 1.0); }`;
+  const setSlice = (pr) => gl.uniform4f(pr.u.u_slice, cfg.x, cfg.y, cfg.w, cfg.h);
+  const pxPerVirtual = () => cv.width / cfg.w;
+
+  // Textured quad (nebula, planets). Rect in virtual coords. Textures are premultiplied.
+  const quad = program(`
+    attribute vec2 a_corner; uniform vec4 u_rect; varying vec2 v_uv; ${CLIP}
+    void main() { v_uv = a_corner; gl_Position = clip(u_rect.xy + a_corner * u_rect.zw); }`, `
+    precision mediump float; uniform sampler2D u_tex; varying vec2 v_uv;
+    void main() { gl_FragColor = texture2D(u_tex, v_uv); }`);
+  const quadBuf = buffer(new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]));
+  function drawQuad(tex, x, y, w, h) {
+    gl.useProgram(quad.p); setSlice(quad);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf); gl.enableVertexAttribArray(quad.a.a_corner); gl.vertexAttribPointer(quad.a.a_corner, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform4f(quad.u.u_rect, x, y, w, h);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(quad.u.u_tex, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
 
   // ---------------- warp: flying forward or backward, vanishing point between the TVs ----------------
   function warp() {
     const fwd = cfg.dir !== 'backward';
-    const N = cfg.count || Math.round(cfg.tw * cfg.th / 2500);
-    const cx = cfg.tw / 2, cy = cfg.th / 2;
-    const K = 0.45;                   // stars spawn within the central 45% and stream outward
+    const N = Math.min(16000, cfg.count || Math.round(cfg.tw * cfg.th / 2500));
     const rate = 0.12 * cfg.speed;    // star lifetimes per second
     const streak = 0.012 * cfg.speed; // how far back in z the motion streak reaches
-    return () => {
-      beginFrame();
-      const t = (Date.now() / 1000) * rate;
-      ctx.lineCap = 'round';
-      for (let i = 0; i < N; i++) {
-        const ux = hash(i, 1) * 2 - 1, uy = hash(i, 2) * 2 - 1;
-        const cyc = (hash(i, 3) + t) % 1;
-        const z = fwd ? 1 - cyc : cyc;             // 1 = far away, 0 = at the window
-        if (z < 0.02) continue;
-        const zp = fwd ? Math.min(1, z + streak) : Math.max(0.02, z - streak); // where it was a moment ago
-        const x = cx + ux * cx * K / z,  y = cy + uy * cy * K / z;
-        const xp = cx + ux * cx * K / zp, yp = cy + uy * cy * K / zp;
-        if (!onScreen(x, y, xp, yp, 8)) continue;
-        const near = 1 - z;
-        const a = Math.min(1, near * 1.6) * (0.55 + 0.45 * hash(i, 4));
-        ctx.strokeStyle = `rgba(${tint(i)},${a.toFixed(3)})`;
-        ctx.lineWidth = 0.6 + 2.4 * near * near;
-        ctx.beginPath(); ctx.moveTo(xp, yp); ctx.lineTo(x, y); ctx.stroke();
+    // Each star is a quad stretched between where it is and where it was a moment ago.
+    const pr = program(`
+      attribute vec4 a_star;   // ux, uy, z0, brightness
+      attribute vec3 a_v;      // tint index, end (0 = previous, 1 = current), side (-1 / 1)
+      uniform vec2 u_center; uniform float u_k, u_t, u_streak, u_fwd; uniform vec3 u_tints[4];
+      varying vec3 v_col; varying vec2 v_lc; varying float v_len, v_hw; ${CLIP}
+      void main() {
+        float cyc = fract(a_star.z + u_t);
+        float z = u_fwd > 0.5 ? 1.0 - cyc : cyc;
+        float zp = u_fwd > 0.5 ? min(1.0, z + u_streak) : max(0.02, z - u_streak);
+        z = max(z, 0.02);
+        vec2 p1 = u_center + a_star.xy * u_center * u_k / z;
+        vec2 p0 = u_center + a_star.xy * u_center * u_k / zp;
+        float near = 1.0 - z;
+        float a = min(1.0, near * 1.6) * (0.55 + 0.45 * a_star.w);
+        float hw = (0.6 + 2.4 * near * near) * 0.5 + 0.7;   // half width in virtual px, plus soft margin
+        vec2 d = p1 - p0; float len = length(d);
+        vec2 dir = len > 0.001 ? d / len : vec2(1.0, 0.0);
+        vec2 nrm = vec2(-dir.y, dir.x);
+        vec2 p = (a_v.y > 0.5 ? p1 + dir * hw : p0 - dir * hw) + nrm * hw * a_v.z;
+        v_lc = vec2(a_v.y > 0.5 ? len + hw : -hw, hw * a_v.z);
+        v_len = len; v_hw = hw;
+        int ti = int(a_v.x + 0.5);
+        v_col = (ti == 0 ? u_tints[0] : ti == 1 ? u_tints[1] : ti == 2 ? u_tints[2] : u_tints[3]) * a;
+        gl_Position = clip(p);
+      }`, `
+      precision mediump float; varying vec3 v_col; varying vec2 v_lc; varying float v_len, v_hw;
+      void main() {
+        float along = max(0.0, max(-v_lc.x, v_lc.x - v_len));
+        float dist = length(vec2(along, v_lc.y));
+        float a = smoothstep(v_hw, v_hw * 0.35, dist);
+        gl_FragColor = vec4(v_col * a, a);
+      }`);
+    const star = new Float32Array(N * 4 * 4), vtx = new Float32Array(N * 4 * 3), idx = new Uint16Array(N * 6);
+    for (let i = 0; i < N; i++) {
+      const s = [hash(i, 1) * 2 - 1, hash(i, 2) * 2 - 1, hash(i, 3), hash(i, 4)], t = Math.floor(hash(i, 9) * 4);
+      for (let c = 0; c < 4; c++) {
+        star.set(s, (i * 4 + c) * 4);
+        vtx.set([t, c >> 1, (c & 1) ? 1 : -1], (i * 4 + c) * 3);
       }
+      idx.set([0, 1, 2, 2, 1, 3].map(v => v + i * 4), i * 6);
+    }
+    const starBuf = buffer(star), vtxBuf = buffer(vtx), idxBuf = buffer(idx, gl.ELEMENT_ARRAY_BUFFER);
+    const tints = new Float32Array(TINTS.flat());
+    return () => {
+      gl.useProgram(pr.p); setSlice(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, starBuf); gl.enableVertexAttribArray(pr.a.a_star); gl.vertexAttribPointer(pr.a.a_star, 4, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vtxBuf); gl.enableVertexAttribArray(pr.a.a_v); gl.vertexAttribPointer(pr.a.a_v, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+      gl.uniform2f(pr.u.u_center, cfg.tw / 2, cfg.th / 2);
+      gl.uniform1f(pr.u.u_k, 0.45);
+      gl.uniform1f(pr.u.u_t, ((Date.now() / 1000) * rate) % 1); // wrapped in double precision before it hits float32
+      gl.uniform1f(pr.u.u_streak, streak); gl.uniform1f(pr.u.u_fwd, fwd ? 1 : 0);
+      gl.uniform3fv(pr.u.u_tints, tints);
+      gl.blendFunc(gl.ONE, gl.ONE); // additive glow
+      gl.drawElements(gl.TRIANGLES, N * 6, gl.UNSIGNED_SHORT, 0);
     };
   }
 
   // ---------------- cruise: side windows, parallax layers drifting past ----------------
   function cruise() {
     const N = cfg.count || Math.round(cfg.tw * cfg.th / 2200);
-    // depth = parallax factor (1 = nearest, moves fastest). Weights bias stars toward the far layers.
-    const LAYERS = [
+    const LAYERS = [ // depth = parallax factor (1 = nearest, fastest); weights bias stars toward the far layers
       { depth: 0.06, size: 0.8, alpha: 0.30, weight: 0.34 },
       { depth: 0.14, size: 1.0, alpha: 0.45, weight: 0.28 },
       { depth: 0.30, size: 1.4, alpha: 0.65, weight: 0.20 },
       { depth: 0.55, size: 2.0, alpha: 0.85, weight: 0.12 },
       { depth: 1.00, size: 3.0, alpha: 1.00, weight: 0.06 },
     ];
-    const pick = r => { let acc = 0; for (const L of LAYERS) { acc += L.weight; if (r < acc) return L; } return LAYERS[LAYERS.length - 1]; };
-    const base = 60 * cfg.speed; // px/s for the nearest layer
-    const sgn = cfg.dir === 'right' ? 1 : -1;
+    const pickLayer = r => { let acc = 0; for (let l = 0; l < LAYERS.length; l++) { acc += LAYERS[l].weight; if (r < acc) return l; } return LAYERS.length - 1; };
+    const base = 60 * cfg.speed, sgn = cfg.dir === 'right' ? 1 : -1;
 
-    // A faint nebula, painted once in virtual coordinates and scrolled behind everything.
-    const neb = document.createElement('canvas');
-    neb.width = cfg.tw; neb.height = cfg.th;
+    const pr = program(`
+      attribute vec4 a_star;  // x0, y0, size (virtual px), alpha
+      attribute vec4 a_v;     // layer, twinkle freq, twinkle phase, tint index
+      uniform float u_off[5]; uniform float u_tw, u_t, u_px; uniform vec3 u_tints[4];
+      varying vec3 v_col; ${CLIP}
+      void main() {
+        int l = int(a_v.x + 0.5);
+        float off = l == 0 ? u_off[0] : l == 1 ? u_off[1] : l == 2 ? u_off[2] : l == 3 ? u_off[3] : u_off[4];
+        float x = mod(a_star.x + off, u_tw);
+        float tw = 0.75 + 0.25 * sin(u_t * a_v.y + a_v.z);
+        int ti = int(a_v.w + 0.5);
+        v_col = (ti == 0 ? u_tints[0] : ti == 1 ? u_tints[1] : ti == 2 ? u_tints[2] : u_tints[3]) * a_star.w * tw;
+        gl_PointSize = max(1.0, (a_star.z + 1.5) * u_px);
+        gl_Position = clip(vec2(x, a_star.y));
+      }`, `
+      precision mediump float; varying vec3 v_col;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float a = smoothstep(1.0, 0.25, d);
+        gl_FragColor = vec4(v_col * a, a);
+      }`);
+    const star = new Float32Array(N * 4), v = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) {
+      const l = pickLayer(hash(i, 5)), L = LAYERS[l];
+      star.set([hash(i, 1) * cfg.tw, hash(i, 2) * cfg.th, L.size * (0.7 + 0.6 * hash(i, 8)), L.alpha], i * 4);
+      v.set([l, 0.6 + 1.6 * hash(i, 6), hash(i, 7) * 6.283, Math.floor(hash(i, 9) * 4)], i * 4);
+    }
+    const starBuf = buffer(star), vBuf = buffer(v), tints = new Float32Array(TINTS.flat());
+
+    // Nebula: painted once at reduced resolution, scrolled as two textured quads (wraps seamlessly).
+    const nw = Math.min(2048, cfg.tw), nh = Math.round(nw * cfg.th / cfg.tw), sx = nw / cfg.tw;
+    const neb = document.createElement('canvas'); neb.width = nw; neb.height = nh;
     const nc = neb.getContext('2d');
-    const COLORS = ['90,60,160', '40,90,170', '150,50,110', '50,120,140', '120,70,150'];
     for (let i = 0; i < 9; i++) {
-      const gx = hash(i, 21) * cfg.tw, gy = hash(i, 22) * cfg.th;
-      const r = (0.25 + 0.4 * hash(i, 23)) * cfg.th;
-      const c = COLORS[i % COLORS.length];
-      for (const dx of [0, gx < cfg.tw / 2 ? cfg.tw : -cfg.tw]) { // mirror across the wrap seam
+      const gx = hash(i, 21) * nw, gy = hash(i, 22) * nh, r = (0.25 + 0.4 * hash(i, 23)) * nh, c = NEB_COLORS[i % NEB_COLORS.length];
+      for (const dx of [0, gx < nw / 2 ? nw : -nw]) {
         const g = nc.createRadialGradient(gx + dx, gy, 0, gx + dx, gy, r);
         g.addColorStop(0, `rgba(${c},0.18)`); g.addColorStop(1, `rgba(${c},0)`);
         nc.fillStyle = g; nc.fillRect(gx + dx - r, gy - r, r * 2, r * 2);
       }
     }
+    const nebTex = texture(neb);
 
-    // Planets: pre-rendered sprites that drift by on the near layers, one every few minutes.
+    // Planets: sprites that drift by on the near layers along a long, mostly off-screen lane.
     const PLANETS = [];
     for (let j = 0; j < 4; j++) {
-      const r = (0.12 + 0.3 * hash(j, 31)) * cfg.th;
-      const pc = document.createElement('canvas'); pc.width = pc.height = Math.ceil(r * 2 + 4);
-      const p = pc.getContext('2d'), c = COLORS[(j + 2) % COLORS.length];
+      const r = Math.round((0.12 + 0.3 * hash(j, 31)) * cfg.th * sx), c = NEB_COLORS[(j + 2) % NEB_COLORS.length];
+      const pc = document.createElement('canvas'); pc.width = pc.height = r * 2 + 4;
+      const p = pc.getContext('2d');
       const light = p.createRadialGradient(r * 0.6, r * 0.6, r * 0.1, r + 2, r + 2, r);
       light.addColorStop(0, `rgba(${c},0.95)`); light.addColorStop(0.7, `rgba(${c},0.55)`); light.addColorStop(1, 'rgba(0,0,0,1)');
       p.fillStyle = light; p.beginPath(); p.arc(r + 2, r + 2, r, 0, 6.283); p.fill();
-      for (let b = 0; b < 6; b++) { // faint bands
+      for (let b = 0; b < 6; b++) {
         p.fillStyle = `rgba(0,0,0,${(0.05 + 0.1 * hash(j * 8 + b, 33)).toFixed(2)})`;
         p.fillRect(0, (0.2 + 0.6 * hash(j * 8 + b, 34)) * r * 2, r * 2 + 4, 2 + 6 * hash(j * 8 + b, 35));
       }
       p.globalCompositeOperation = 'destination-in'; p.beginPath(); p.arc(r + 2, r + 2, r, 0, 6.283); p.fill();
-      const depth = 0.5 + 0.5 * hash(j, 36);
-      PLANETS.push({ sprite: pc, r, depth, lane: cfg.tw * (4 + 4 * hash(j, 37)), y: (0.1 + 0.8 * hash(j, 38)) * cfg.th - r, x0: hash(j, 39) * cfg.tw * 8 });
+      const size = pc.width / sx;
+      PLANETS.push({ tex: texture(pc), size, depth: 0.5 + 0.5 * hash(j, 36), lane: cfg.tw * (4 + 4 * hash(j, 37)), y: (0.1 + 0.8 * hash(j, 38)) * cfg.th - size / 2, x0: hash(j, 39) * cfg.tw * 8 });
     }
 
+    const offs = new Float32Array(5);
     return () => {
-      beginFrame();
       const T = Date.now() / 1000;
       const nebOff = ((sgn * base * 0.03 * T) % cfg.tw + cfg.tw) % cfg.tw;
-      ctx.drawImage(neb, nebOff - cfg.tw, 0); ctx.drawImage(neb, nebOff, 0);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      drawQuad(nebTex, nebOff - cfg.tw, 0, cfg.tw, cfg.th);
+      drawQuad(nebTex, nebOff, 0, cfg.tw, cfg.th);
 
-      for (let i = 0; i < N; i++) {
-        const L = pick(hash(i, 5));
-        const v = sgn * base * L.depth;
-        const x = ((hash(i, 1) * cfg.tw + v * T) % cfg.tw + cfg.tw) % cfg.tw;
-        const y = hash(i, 2) * cfg.th;
-        if (x < cfg.x - 4 || x > cfg.x + cfg.w + 4 || y < cfg.y - 4 || y > cfg.y + cfg.h + 4) continue;
-        const twk = 0.75 + 0.25 * Math.sin(T * (0.6 + 1.6 * hash(i, 6)) + hash(i, 7) * 6.283);
-        const s = L.size * (0.7 + 0.6 * hash(i, 8));
-        ctx.fillStyle = `rgba(${tint(i)},${(L.alpha * twk).toFixed(3)})`;
-        if (s < 1.6) ctx.fillRect(x - s / 2, y - s / 2, s, s);
-        else { ctx.beginPath(); ctx.arc(x, y, s / 2, 0, 6.283); ctx.fill(); }
-      }
+      gl.useProgram(pr.p); setSlice(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, starBuf); gl.enableVertexAttribArray(pr.a.a_star); gl.vertexAttribPointer(pr.a.a_star, 4, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vBuf); gl.enableVertexAttribArray(pr.a.a_v); gl.vertexAttribPointer(pr.a.a_v, 4, gl.FLOAT, false, 0, 0);
+      for (let l = 0; l < 5; l++) offs[l] = ((sgn * base * LAYERS[l].depth * T) % cfg.tw + cfg.tw) % cfg.tw; // wrapped in double precision
+      gl.uniform1fv(pr.u.u_off, offs);
+      gl.uniform1f(pr.u.u_tw, cfg.tw); gl.uniform1f(pr.u.u_t, T % 1000); gl.uniform1f(pr.u.u_px, pxPerVirtual());
+      gl.uniform3fv(pr.u.u_tints, tints);
+      gl.blendFunc(gl.ONE, gl.ONE); // additive glow for stars
+      gl.drawArrays(gl.POINTS, 0, N);
 
-      // Planets travel a long "lane" that is mostly off-screen, so they appear only now and then.
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       for (const P of PLANETS) {
         const v = sgn * base * P.depth;
-        let x = ((P.x0 + v * T) % P.lane + P.lane) % P.lane - P.r * 2; // lane starts just left of the sky
-        if (x > cfg.tw + P.r * 2) continue;
-        if (!onScreen(x, P.y, x + P.r * 2, P.y + P.r * 2, 0)) continue;
-        ctx.drawImage(P.sprite, x, P.y);
+        const x = ((P.x0 + v * T) % P.lane + P.lane) % P.lane - P.size;
+        if (x > cfg.tw + P.size) continue;
+        if (x + P.size < cfg.x || x > cfg.x + cfg.w || P.y + P.size < cfg.y || P.y > cfg.y + cfg.h) continue;
+        drawQuad(P.tex, x, P.y, P.size, P.size);
       }
     };
   }
 
+  gl.enable(gl.BLEND);
+  gl.clearColor(0, 0, 0, 1);
   const draw = (cfg.dir === 'forward' || cfg.dir === 'backward') ? warp() : cruise();
-  (function loop() { draw(); requestAnimationFrame(loop); })();
+  (function loop() {
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+    requestAnimationFrame(loop);
+  })();
 })();
 </script>
 </body>

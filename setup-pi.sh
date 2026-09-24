@@ -121,7 +121,7 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   fi
   if ! command -v unclutter >/dev/null; then sudo apt-get install -y unclutter >/dev/null 2>&1 || true; fi
 
-  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; MODE=
+  DIRECTION=left; SPEED=1; GAP=0; ORDER=normal; COUNT=; SCALE=1; MODE=
   [ -f "$STARS_CONF" ] && . "$STARS_CONF"
   [ "$MODE" = warp ] && [ "$DIRECTION" = left ] && DIRECTION=forward
   echo "Which way do the stars travel past the windows?"
@@ -135,12 +135,14 @@ if [[ "${ans:-N}" =~ ^[Yy] ]]; then
   echo "Wall between the TVs: stars cross it invisibly if you give its width in pixels."
   echo "  (wall width / one TV's width) x that TV's horizontal resolution, e.g. 6in/40in x 1920 = 288"
   read -r -p "Gap in pixels [$GAP]: " v; GAP="${v:-$GAP}"
+  read -r -p "Render scale, 1 = full resolution, 0.5 = half (smoother on a slow Pi) [$SCALE]: " v; SCALE="${v:-$SCALE}"
   printf 'DIRECTION=%s
 SPEED=%s
 GAP=%s
 ORDER=%s
 COUNT=%s
-' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" > "$STARS_CONF"
+SCALE=%s
+' "$DIRECTION" "$SPEED" "$GAP" "$ORDER" "$COUNT" "$SCALE" > "$STARS_CONF"
   chmod +x "$STARS_DIR/stars.sh"
 
   RUN_UID="$(id -u "$RUN_USER")"
@@ -179,7 +181,7 @@ UNITEOF
   echo "Starfield commands:"
   echo "  sudo systemctl start nibex-stars    (room idle: stars on the TVs)"
   echo "  sudo systemctl stop nibex-stars     (game time: back to the dashboard)"
-  echo "  edit stars/stars.conf then restart to tweak direction, speed, gap"
+  echo "  edit stars/stars.conf then restart to tweak direction, speed, gap, scale"
 fi
 
 if systemctl is-active --quiet "$SERVICE"; then
