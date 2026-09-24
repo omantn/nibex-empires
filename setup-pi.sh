@@ -108,6 +108,59 @@ sudo systemctl enable "$SERVICE" >/dev/null
 sudo systemctl restart "$SERVICE"
 sleep 2
 
+# ---------- Desktop resolution (optional) ----------
+say "Desktop resolution (optional)"
+echo "A Pi cannot composite two 4K desktops smoothly. Forcing the TVs to 1080p fixes that; the TVs upscale it."
+NEED_REBOOT=0
+read -r -p "Change the desktop resolution of the HDMI outputs? [y/N] " ans
+if [[ "${ans:-N}" =~ ^[Yy] ]]; then
+  mapfile -t OUTS < <(for s in /sys/class/drm/card*-HDMI-A-*/status; do
+    [ -f "$s" ] && [ "$(cat "$s")" = connected ] && basename "$(dirname "$s")" | sed 's/^card[0-9]*-//'; done | sort -u)
+  if [ "${#OUTS[@]}" -eq 0 ]; then
+    warn "No connected HDMI outputs found under /sys/class/drm. Skipping."
+  else
+    echo "Connected outputs: ${OUTS[*]}"
+    while :; do
+      read -r -p "Resolution [1920x1080]: " RES; RES="${RES:-1920x1080}"
+      [[ "$RES" =~ ^[0-9]+x[0-9]+$ ]] && break; warn "Use WIDTHxHEIGHT, e.g. 1920x1080."
+    done
+    RW="${RES%x*}"
+    STAMP="$(date +%Y%m%d%H%M%S)"
+
+    # 1. Kernel command line: the mode used for the console and as the default for X11.
+    CMDLINE=/boot/firmware/cmdline.txt; [ -f "$CMDLINE" ] || CMDLINE=/boot/cmdline.txt
+    if [ -f "$CMDLINE" ]; then
+      sudo cp "$CMDLINE" "$CMDLINE.bak.$STAMP"
+      line="$(sudo head -n1 "$CMDLINE" | sed -E 's/ ?video=HDMI-A-[0-9]+:[^ ]*//g')"
+      for o in "${OUTS[@]}"; do line="$line video=$o:${RES}@60D"; done
+      printf '%s\n' "$line" | sudo tee "$CMDLINE" >/dev/null
+      echo "Updated $CMDLINE (backup: $CMDLINE.bak.$STAMP)"
+    fi
+
+    # 2. labwc desktop (current Pi OS): kanshi profile, the same file the Screen Configuration tool writes.
+    if command -v labwc >/dev/null || command -v kanshi >/dev/null; then
+      KANSHI="/home/$RUN_USER/.config/kanshi/config"
+      mkdir -p "$(dirname "$KANSHI")"; [ -f "$KANSHI" ] && cp "$KANSHI" "$KANSHI.bak.$STAMP"
+      { echo "profile {"; x=0; for o in "${OUTS[@]}"; do echo "    output $o mode ${RES}@60 position $x,0"; x=$((x + RW)); done; echo "}"; } > "$KANSHI"
+      echo "Wrote $KANSHI"
+    fi
+
+    # 3. wayfire desktop (Pi OS Bookworm before late 2024): per-output sections in wayfire.ini.
+    WF="/home/$RUN_USER/.config/wayfire.ini"
+    if [ -f "$WF" ]; then
+      cp "$WF" "$WF.bak.$STAMP"
+      x=0
+      for o in "${OUTS[@]}"; do
+        awk -v sec="[output:$o]" 'BEGIN{skip=0} /^\[/{skip=($0==sec)} !skip' "$WF" > "$WF.tmp" && mv "$WF.tmp" "$WF"
+        printf '\n[output:%s]\nmode = %s@60\nposition = %s,0\n' "$o" "$RES" "$x" >> "$WF"; x=$((x + RW))
+      done
+      echo "Updated $WF"
+    fi
+    NEED_REBOOT=1
+    echo "Outputs are placed side by side in the order listed above. Reboot to apply."
+  fi
+fi
+
 # ---------- Starfield display (optional second service) ----------
 say "Starfield display for the TVs (optional)"
 read -r -p "Set up the starfield screensaver service (nibex-stars)? [y/N] " ans
@@ -208,4 +261,10 @@ else
   warn "Service failed to start. Recent log:"
   sudo journalctl -u "$SERVICE" -n 30 --no-pager
   exit 1
+fi
+
+if [ "${NEED_REBOOT:-0}" = 1 ]; then
+  echo
+  read -r -p "Reboot now to apply the new desktop resolution? [y/N] " v
+  if [[ "${v:-N}" =~ ^[Yy] ]]; then sudo reboot; else echo "Remember to reboot before judging the starfield."; fi
 fi

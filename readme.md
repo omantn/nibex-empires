@@ -19,7 +19,7 @@ Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs d
     sudo systemctl start nibex-stars
     sudo systemctl stop nibex-stars
 
-The sky is drawn with WebGL, so the Pi's GPU does the work. Tweak `stars/stars.conf` (direction, speed, wall gap, screen order, render scale) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
+The sky is drawn with WebGL, so the Pi's GPU does the work. If the TVs are 4K, let the setup script change the desktop resolution to 1080p (its optional "Desktop resolution" step): a Pi cannot composite two 4K desktops smoothly, and the TVs upscale 1080p invisibly from across a room. Tweak `stars/stars.conf` (direction, speed, wall gap, screen order, render scale) and restart the service. To preview on any computer, open `stars/index.html` in a browser.
 
 ## Before the event
 
