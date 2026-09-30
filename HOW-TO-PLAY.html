@@ -1,11 +1,55 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>How to play — Nibex: Empires</title>
-<style>body{font:17px/1.55 system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 24px;color:#17202a}p{margin:12px 0}summary{display:none}h1{line-height:1.2}@media print{body{font-size:11pt;margin:0}}</style>
-<h1>Nibex: Empires</h1><p>Plan your moves, make your deals, and enjoy the weekend. Your real name stays private until the final trophy ceremony.</p>
-<p>This guide uses the default settings. The live How to play panel shows the host's configured turn length and daily budget.</p>
-<details open>
-        <summary style="cursor:pointer"><b>❓ How to play</b></summary>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: system-ui, sans-serif; min-height: 100vh; }
+  a { color: #58a6ff; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  h2 { font-size: 1.1rem; margin: 20px 0 8px; color: #9ec1ff; }
+  .muted { color: #8b949e; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-top: 12px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > .card { flex: 1 1 280px; }
+  input, select, button { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; }
+  button { background: #238636; border-color: #2ea043; cursor: pointer; font-weight: 600; }
+  button.danger { background: #b62324; border-color: #da3633; }
+  label { display: block; margin: 10px 0 4px; font-size: .9rem; color: #8b949e; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; }
+  ul.roster { list-style: none; } ul.roster li { padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+  .emblem { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; flex: none; }
+  .emblem.lg { width: 56px; height: 56px; border-radius: 10px; }
+  .big { font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .banner { text-align: center; padding: 24px; }
+  #ticker li { padding: 3px 0; border-bottom: 1px solid #21262d; font-size: .95rem; }
+  .qr { background: #fff; padding: 12px; border-radius: 10px; display: inline-block; }
+  .err { color: #ff7b72; margin-top: 8px; }
+  .stats { display: flex; align-items: center; gap: 16px; font-size: 1.05rem; flex-wrap: wrap; }
+  .btnrow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button:disabled { opacity: .4; cursor: default; }
+  .qitem { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #21262d; }
+  .qitem button { padding: 3px 12px; background: #30363d; border-color: #484f58; }
+
+  .wrap { max-width: 800px; }
+  .guide { font-size: 17px; line-height: 1.55; }
+  .guide h1 { line-height: 1.2; }
+  .guide p { margin: 12px 0; }
+  .guide nav { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 24px; }
+  .guide .help p { margin: 0; }
+  @media print {
+    body { background: white; color: #17202a; }
+    .wrap { max-width: none; padding: 0; }
+    .guide { font-size: 11pt; }
+    .guide nav { display: none; }
+    .guide h2, .muted { color: #17202a; }
+  }
+</style></head><body><main class="wrap guide">
+
+<h1>Nibex: Empires</h1>
+<h2>How to play</h2>
+<p>Plan your moves, make your deals, and enjoy the weekend. Your real name stays private until the final trophy ceremony.</p>
+<p class="muted">This guide uses the default settings. Visit /howtoplay on the game server for the host&#39;s configured turn length and daily budget.</p>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px" class="help">
           <p><b>Turns.</b> The world advances every 180 minutes on the host's schedule. Attacks depart together; submitting first provides no combat advantage.</p>
           <p><b>Your orders.</b> You receive 20 orders at launch and each Daybreak. Unused orders expire; queued plans carry forward. Cancelling an older day's plan refunds resources but not today's orders. Spending more time in the app gives no extra orders, though reacting to new information can still help.</p>
@@ -89,7 +133,6 @@
           day's deals.</p>
           <p><b>Scoring.</b> 1 point per tile you hold outside your ward, +1 extra for tiles in the
           rich center. Pool ore, food, and armies at the market rate: 5 ore = 25 food = 5 strength = 1 point, rounding down once for the whole pool. Trades and resolved musters preserve that value; battle losses reduce it. Relic points reveal at the finale — the leaderboard can lie.</p>
+          <p><b>At the deadline:</b> pending orders expire and paid resources return before scores are frozen. There is no extra final turn. Ties use total points, then territory points, then earlier registration.</p>
         </div>
-      </details>
-<p><b>At the deadline:</b> pending orders expire and paid resources return before scores are frozen. There is no extra final turn. Ties use total points, then territory points, then earlier registration.</p>
-</html>
+</main></body></html>

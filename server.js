@@ -14,7 +14,7 @@ import {
   findPlayerByAbbrPin, sendMessage, getThread, proposePact, respondPact, withdrawPact, startFinale,
   exchange, pauseGame, resumeGame,
 } from './src/game.js'
-import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage, parseInset } from './src/views.js'
+import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage, howToPlayPage, parseInset } from './src/views.js'
 
 const PORT = Number(process.env.PORT ?? 3000)
 const app = express()
@@ -40,6 +40,16 @@ function lanAddress() {
 const joinUrl = process.env.PUBLIC_URL ? new URL('/join', process.env.PUBLIC_URL).href : `http://${lanAddress()}:${PORT}/join`
 
 app.get('/', (_req, res) => res.redirect('/dashboard'))
+
+// Public, read-only rules: no player account needed, and settings stay current.
+app.get('/howtoplay', (_req, res) => {
+  const settings = allSettings()
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(howToPlayPage({
+    tickIntervalMin: Number(settings.tick_interval_min),
+    ordersPerDay: Number(settings.orders_per_day),
+  }))
+})
 
 // Safe-area inset for TVs whose bezel or a decorative frame hides the edges of the picture.
 // DASHBOARD_INSET sets the default (e.g. "60" or "40,80"); ?inset= on the URL overrides it.
@@ -92,7 +102,11 @@ app.post('/logout', (_req, res) => {
 
 // Emblems are always generated (abbr on empire color) — uploads removed for
 // visual consistency. multer().none() still parses multipart form posts.
-const parseJoinForm = multer().none()
+const parseJoinForm = multer({ limits: {
+  fields: 4, files: 0, parts: 4, fieldNameSize: 32, fieldSize: 1024,
+  // The join form has four flat text fields, never nested objects or arrays.
+  fieldNestingDepth: 0, fieldArrayIndexLimit: 0,
+} }).none()
 
 app.post('/join', (req, res) => parseJoinForm(req, res, (formErr) => { try {
   if (findPlayerByToken(getCookie(req, 'nibex_token'))) return res.redirect('/play')
@@ -317,6 +331,9 @@ app.post('/admin/launch', (req, res) => {
   }
   io.emit('event', launchGame(endAt))
   io.emit('state', publicState())
+  // Phones already waiting in the lobby need their new resources, garrisons,
+  // order allowance and quest too. Keep each snapshot in its private room.
+  for (const player of listPlayers()) io.to(`p${player.id}`).emit('me', personalState(player.id))
   res.redirect('/admin')
 })
 

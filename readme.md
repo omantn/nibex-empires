@@ -1,8 +1,10 @@
 # Nibex: Empires — host guide
 
-The weekend empire game for the Nibex cup. Players use /join and /play; keep /dashboard on the TV and /admin on the host's device.
+The weekend empire game for the Nibex cup. Players use /join and /play; anyone can read /howtoplay without joining; keep /dashboard on the TV and /admin on the host's device.
 
 ## Start
+
+Use Node.js 22 LTS (verified with 22.23.3). Keep an existing Node 22 installation; this release does not require a Node upgrade. The pinned SQLite dependency crashed under Node 24.19.0 in testing, so use Node 22 for the event.
 
 Run `Start-Nibex.ps1` in PowerShell. It asks for an admin password if ADMIN_PASSWORD is not already set, starts the server, and restarts it after an unexpected nonzero exit. No admin password is stored in the source code. Keep the host computer awake during the event.
 
@@ -10,7 +12,9 @@ Alternatively, set ADMIN_PASSWORD in the process environment and run `npm start`
 
 ### Raspberry Pi / Linux
 
-Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port. After a `git pull`, run `sudo systemctl restart nibex`.
+Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port.
+
+Before updating, download an Admin backup and make sure no scored game is in progress. From the existing repository, run `git pull --ff-only`, then `npm ci` to install the exact patched dependencies, and `npm test`. Only after those succeed, run `sudo systemctl restart nibex` and verify `/howtoplay` and `/join` from an event-Wi-Fi phone. Do not reset the database or rerun setup just to apply this update.
 
 ### TV frame and icons
 
@@ -64,5 +68,4 @@ Run `npm test`. Tests use disposable databases and an isolated HTTP server on po
 
 ## Player instructions
 
-The live How to play panel on /play is authoritative and uses the configured cadence. HOW-TO-PLAY.html is a refreshed printable guide using the defaults; regenerate it with `npm run guide`. The older HOW-TO-PLAY.pdf is a pre-review export and should not be handed out for this version. DESIGN.md describes the current rules.
-
+Share `/howtoplay` on the game server with players before they join. It is public, mobile-friendly and printable, and shows the host's configured turn length and daily budget when the page is loaded. It shares its rules with the How to play panel on `/play`. HOW-TO-PLAY.html is a printable export using the defaults; regenerate it with `npm run guide`. The older HOW-TO-PLAY.pdf is a pre-review export and should not be handed out for this version. DESIGN.md describes the current rules.
