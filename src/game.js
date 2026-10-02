@@ -361,7 +361,7 @@ function resetGameImpl() {
 // Orders. Queued any time, secret until they resolve simultaneously on the
 // turn. Expand is free (an order slot); muster costs 1 ore, paid on queue and
 // refunded on cancel. Production is automatic: +1 per owned resource tile per
-// turn (warded tiles produce nothing).
+// turn (wards count toward base income but have no resource-tile yield).
 
 const tileAt = (q, r) => db.prepare('SELECT * FROM tiles WHERE q = ? AND r = ?').get(q, r)
 
@@ -896,10 +896,14 @@ function resolveTurnImpl() {
 
   botPlay(events)
 
-  // Capital stipend: every empire's ward provides +1 ore and +1 food per
-  // turn, always — a besieged empire can slowly build its breakout army,
-  // but nobody wins from inside a lifeboat.
-  db.prepare('UPDATE players SET ore = ore + 1, food = food + 1').run()
+  // Base income: one of each resource per five actual owned tiles, rounded
+  // down, including wards, capped at three of each. Count before expansions/battles.
+  for (const row of db.prepare(`
+    SELECT owner_id AS id, COUNT(*) AS owned
+    FROM tiles WHERE owner_id IS NOT NULL GROUP BY owner_id`).all()) {
+    const base = Math.min(3, Math.floor(row.owned / 5))
+    db.prepare('UPDATE players SET ore = ore + ?, food = food + ? WHERE id = ?').run(base, base, row.id)
+  }
 
   // Production: +1 per owned, unwarded resource tile.
   for (const row of db.prepare(`

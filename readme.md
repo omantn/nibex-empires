@@ -42,6 +42,8 @@ The sky is drawn with WebGL, so the Pi's GPU does the work. If the TVs are 4K, l
 
 Players receive five orders at launch. Each ordinary resolved turn adds five to the remaining balance, with no banking cap. At Daybreak the bank resets to five instead of receiving an additional grant. Nightfall pauses turns and order grants. They can plan connected expansion routes that advance one frontier per turn. Cancelling a plan bought since the latest Daybreak returns its order slot; cancelling an older plan does not restore expired slots after the morning reset. Paid ore/food always returns when a pending order is cancelled during play.
 
+Base resource income each resolved turn is one ore and one food per five owned tiles, rounded down, including protected home tiles. Base income is capped at +3 of each: 7 tiles give +1, 10 give +2, and 15 or more give +3; fewer than 5 give zero base income. Each unwarded ore/food tile still adds +1 of its own resource. Production counts land before the turn's expansions and battles. This update does not change existing balances, orders or timing on restart; the new income calculation applies at the next normal production step.
+
 The player map opens on their capital, with zoom/pan controls and a World overview. The TV leaderboard rotates through groups of readable rows every ten seconds.
 
 Pause stops game actions and turns. Resume preserves the remaining time to the next turn. The final end time is a hard event deadline and is NOT extended by a pause; the host can explicitly adjust it in Admin before it passes.

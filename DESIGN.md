@@ -18,7 +18,7 @@ A background strategy game for the Nibex weekend, with secret identities, diplom
 
 ## Map and orders
 
-The hex map scales with player count, using ring spawns, permanent home wards and a resource-rich center. Home wards cannot be conquered. Each empire receives a +1 ore/+1 food stipend per turn; unwarded ore and food tiles produce +1 of their resource.
+The hex map scales with player count, using ring spawns, permanent home wards and a resource-rich center. Home wards cannot be conquered. Base income per turn is `min(3, floor(total owned tiles / 5))` of both ore and food, including wards, capped at three of each with no minimum. Seven starting tiles give +1 of each; ten give +2; fifteen or more give +3; fewer than five give zero base income. Count actual tiles before that turn's expansions and battles, not weighted territory score. Unwarded ore and food tiles independently add +1 of their own resource; that yield is not multiplied.
 
 Orders: expansion (one slot), muster (N ore for N strength, one slot), attack (one food and one slot), move (one slot), raid (one slot), spy (one food and one slot), heist (one food and one slot). Market trades are immediate: five food for one ore, or one ore for five food.
 

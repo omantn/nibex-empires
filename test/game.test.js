@@ -15,6 +15,40 @@ function setup() {
 const treasury=id=>db.prepare('SELECT ore,food,orders_left FROM players WHERE id=?').get(id)
 const tile=(q,id,strength=0)=>db.prepare("INSERT INTO tiles(q,r,terrain,owner_id,strength) VALUES (?,0,'plains',?,?)").run(q,id,strength)
 
+test('base production counts all owned tiles, rounds down, caps at three and has no minimum',()=>{
+ for(const count of [0,4,5,7,9,10,14,15,20,55]) {
+  const {a,b}=setup();db.prepare('DELETE FROM tiles').run()
+  for(let q=0;q<count;q++)tile(q,a.id)
+  // Protected tiles count too; another empire's land must not count for us.
+  db.prepare('UPDATE tiles SET warded=1 WHERE q<7').run()
+  for(let q=100;q<110;q++)tile(q,b.id)
+  const before=treasury(a.id);g.resolveTurn();const after=treasury(a.id)
+  assert.equal(after.ore-before.ore,Math.min(3,Math.floor(count/5)),'ore for '+count+' tiles')
+  assert.equal(after.food-before.food,Math.min(3,Math.floor(count/5)),'food for '+count+' tiles')
+ }
+})
+test('resource-tile yields remain additive and are not multiplied by base income',()=>{
+ const {a}=setup();db.prepare('DELETE FROM tiles').run()
+ for(let q=0;q<15;q++)tile(q,a.id)
+ db.prepare('UPDATE tiles SET warded=1 WHERE q<7').run()
+ db.prepare("UPDATE tiles SET terrain='ore' WHERE q IN (0,7,8)").run()
+ db.prepare("UPDATE tiles SET terrain='food' WHERE q IN (1,9)").run()
+ const before=treasury(a.id);g.resolveTurn();const after=treasury(a.id)
+ assert.equal(after.ore-before.ore,5,'base3 plus2 unwarded ore tiles')
+ assert.equal(after.food-before.food,4,'base3 plus1 unwarded food tile')
+})
+test('a newly expanded tile affects base income starting next turn',()=>{
+ const {a}=setup();db.prepare('DELETE FROM tiles').run()
+ for(let q=0;q<9;q++)tile(q,a.id)
+ tile(9,null)
+ assert(g.queueOrder(a.id,'expand',9,0).ok)
+ const before=treasury(a.id);g.resolveTurn();const first=treasury(a.id)
+ assert.equal(first.ore-before.ore,1);assert.equal(first.food-before.food,1)
+ assert.equal(db.prepare('SELECT owner_id FROM tiles WHERE q=9').get().owner_id,a.id)
+ g.resolveTurn();const second=treasury(a.id)
+ assert.equal(second.ore-first.ore,2);assert.equal(second.food-first.food,2)
+})
+
 test('identities and join timestamps stay private; finale reveals fields only on cue',()=>{
  const {a}=setup();const state=g.publicState();assert.equal(state.players[0].name,undefined);assert.equal(state.players[0].created_at,undefined)
  g.endGame();assert.equal(g.publicState().finale,null);g.startFinale();assert.deepEqual(g.publicState().finale.data.map(p=>Object.keys(p)),[[],[]])
