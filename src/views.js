@@ -531,8 +531,9 @@ function howToPlayRules(state) {
           Enemy tiles touching your territory show theirs too (red badges) — border intel. Deeper
           enemy land is fog, and <i>nobody</i> can ever see inside a ward. What no one ever sees:
           orders queued for the next turn.</p>
-          <p><b>Resources.</b> Your base income each turn is 1 ⛏️ and 1 🌾 per 5 tiles you own,
-          rounded down, including your protected home tiles, capped at +3 of each: 7 owned tiles give
+          <p><b>Resources.</b> Your base income each turn is 1 ⛏️ and 1 🌾 per 5 non-resource tiles you own,
+          rounded down, including your starting plains and protected home tiles. Plains and relic sites count;
+          ore and food tiles do not. Base income is capped at +3 of each: 7 non-resource tiles give
           +1 of each, 10 give +2, 15 or more give +3, and fewer than 5 give no base income. Each unwarded
           ⛏️ ore or 🌾 food tile still adds +1 of its own resource, unchanged. Production uses your
           land before that turn's expansions and battles. Ore builds armies; food feeds marches and skulduggery.</p>
@@ -540,7 +541,7 @@ function howToPlayRules(state) {
           No order needed. A besieged empire can sell its harvest and raise an army the same
           turn — you're never locked out of war by the wrong treasury.</p>
           <p><b>🛡️ Your ward.</b> Your capital and its ring can never be attacked or taken — you can
-          always come back. Warded tiles count toward base income but provide no resource-tile
+          always come back. Non-resource warded tiles count toward base income but provide no resource-tile
           yield or territory points. They can still garrison an army, and their troops contribute to your resource score.</p>
           <p><b>🤝 Diplomacy.</b> Message any empire privately — deals, threats, lies, all fair
           game (and the ONLY way to talk: that's the rules). Propose a <b>pact of non-aggression</b>;

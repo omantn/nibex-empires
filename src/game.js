@@ -361,7 +361,7 @@ function resetGameImpl() {
 // Orders. Queued any time, secret until they resolve simultaneously on the
 // turn. Expand is free (an order slot); muster costs 1 ore, paid on queue and
 // refunded on cancel. Production is automatic: +1 per owned resource tile per
-// turn (wards count toward base income but have no resource-tile yield).
+// turn (non-resource wards count toward base income but have no resource-tile yield).
 
 const tileAt = (q, r) => db.prepare('SELECT * FROM tiles WHERE q = ? AND r = ?').get(q, r)
 
@@ -896,12 +896,13 @@ function resolveTurnImpl() {
 
   botPlay(events)
 
-  // Base income: one of each resource per five actual owned tiles, rounded
+  // Base income: one of each resource per five owned non-resource tiles, rounded
   // down, including wards, capped at three of each. Count before expansions/battles.
   for (const row of db.prepare(`
-    SELECT owner_id AS id, COUNT(*) AS owned
-    FROM tiles WHERE owner_id IS NOT NULL GROUP BY owner_id`).all()) {
-    const base = Math.min(3, Math.floor(row.owned / 5))
+    SELECT owner_id AS id, COUNT(*) AS non_resource_owned
+    FROM tiles WHERE owner_id IS NOT NULL AND terrain NOT IN ('ore', 'food')
+    GROUP BY owner_id`).all()) {
+    const base = Math.min(3, Math.floor(row.non_resource_owned / 5))
     db.prepare('UPDATE players SET ore = ore + ?, food = food + ? WHERE id = ?').run(base, base, row.id)
   }
 

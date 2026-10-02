@@ -15,7 +15,7 @@ function setup() {
 const treasury=id=>db.prepare('SELECT ore,food,orders_left FROM players WHERE id=?').get(id)
 const tile=(q,id,strength=0)=>db.prepare("INSERT INTO tiles(q,r,terrain,owner_id,strength) VALUES (?,0,'plains',?,?)").run(q,id,strength)
 
-test('base production counts all owned tiles, rounds down, caps at three and has no minimum',()=>{
+test('base production counts owned non-resource tiles, rounds down, caps at three and has no minimum',()=>{
  for(const count of [0,4,5,7,9,10,14,15,20,55]) {
   const {a,b}=setup();db.prepare('DELETE FROM tiles').run()
   for(let q=0;q<count;q++)tile(q,a.id)
@@ -27,15 +27,32 @@ test('base production counts all owned tiles, rounds down, caps at three and has
   assert.equal(after.food-before.food,Math.min(3,Math.floor(count/5)),'food for '+count+' tiles')
  }
 })
-test('resource-tile yields remain additive and are not multiplied by base income',()=>{
- const {a}=setup();db.prepare('DELETE FROM tiles').run()
- for(let q=0;q<15;q++)tile(q,a.id)
- db.prepare('UPDATE tiles SET warded=1 WHERE q<7').run()
- db.prepare("UPDATE tiles SET terrain='ore' WHERE q IN (0,7,8)").run()
- db.prepare("UPDATE tiles SET terrain='food' WHERE q IN (1,9)").run()
- const before=treasury(a.id);g.resolveTurn();const after=treasury(a.id)
- assert.equal(after.ore-before.ore,5,'base3 plus2 unwarded ore tiles')
- assert.equal(after.food-before.food,4,'base3 plus1 unwarded food tile')
+test('ore and food tiles never count toward base income; their unwarded yields remain additive',()=>{
+ for(const count of [0,4,5,7,9,10,14,15,20,55]) {
+  const {a}=setup();db.prepare('DELETE FROM tiles').run()
+  for(let q=0;q<count;q++)tile(q,a.id)
+  db.prepare('UPDATE tiles SET warded=1 WHERE q<7').run()
+  for(let q=100;q<105;q++)tile(q,a.id)
+  db.prepare("UPDATE tiles SET terrain='ore' WHERE q IN (100,102,103)").run()
+  db.prepare("UPDATE tiles SET terrain='food' WHERE q IN (101,104)").run()
+  db.prepare('UPDATE tiles SET warded=1 WHERE q IN (100,101)').run()
+  const before=treasury(a.id);g.resolveTurn();const after=treasury(a.id)
+  const base=Math.min(3,Math.floor(count/5))
+  assert.equal(after.ore-before.ore,base+2,'base plus2 unwarded ore tiles at '+count+' non-resource tiles')
+  assert.equal(after.food-before.food,base+1,'base plus1 unwarded food tile at '+count+' non-resource tiles')
+ }
+})
+test('starting plains and relic sites count toward base income',()=>{
+ const {a}=setup()
+ const starting=db.prepare('SELECT terrain,warded FROM tiles WHERE owner_id=?').all(a.id)
+ assert.equal(starting.length,7)
+ assert(starting.every(t=>t.terrain==='plains' && t.warded===1))
+ const before=treasury(a.id);g.resolveTurn();const first=treasury(a.id)
+ assert.equal(first.ore-before.ore,1);assert.equal(first.food-before.food,1)
+ for(let q=100;q<103;q++)tile(q,a.id)
+ db.prepare("UPDATE tiles SET terrain='relic' WHERE q>=100").run()
+ g.resolveTurn();const second=treasury(a.id)
+ assert.equal(second.ore-first.ore,2);assert.equal(second.food-first.food,2)
 })
 test('a newly expanded tile affects base income starting next turn',()=>{
  const {a}=setup();db.prepare('DELETE FROM tiles').run()

@@ -49,6 +49,8 @@ test('HTTP auth, settings validation, signup and event controls',async()=>{
     const defaultGuide=await guide.text()
     assert.match(defaultGuide,/every 180 minutes/)
     assert.match(defaultGuide,/receive 5 orders/)
+    assert.match(defaultGuide,/per 5 non-resource tiles you own/)
+    assert.match(defaultGuide,/ore and food tiles do not/)
     assert.match(defaultGuide,/At the deadline:/)
     assert.match(defaultGuide,/earlier registration/)
     assert.match(await (await fetch(base+'/join')).text(),/href="\/howtoplay"/)
