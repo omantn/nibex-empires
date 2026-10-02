@@ -22,6 +22,7 @@ export function findPlayerByToken(token) {
   return db.prepare('SELECT * FROM players WHERE token = ?').get(token) ?? null
 }
 
+export const ORDERS_PER_TURN = 5
 const STARTING_ORE = 5
 const STARTING_FOOD = 5
 
@@ -65,7 +66,7 @@ export function createPlayer({ name, empire, abbr, pin = null, emblem = null, em
   const token = crypto.randomUUID()
   const color = count < COLORS.length ? COLORS[count] : pickOverflowColor()
   db.prepare('INSERT INTO players (token, name, empire, abbr, color, pin, emblem, emblem_mime, orders_left, ore, food) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(token, name, empire, abbr, color, hashPin(pin), emblem, emblemMime, Number(getSetting('orders_per_day')), STARTING_ORE, STARTING_FOOD)
+    .run(token, name, empire, abbr, color, hashPin(pin), emblem, emblemMime, ORDERS_PER_TURN, STARTING_ORE, STARTING_FOOD)
   return findPlayerByToken(token)
 }
 
@@ -286,7 +287,7 @@ function launchGameImpl(endAt) {
   if (bots > 0) spawnBots(bots)
   generateMap()
   db.prepare('UPDATE players SET orders_left = ?, ore = ?, food = ?')
-    .run(Number(getSetting('orders_per_day')), STARTING_ORE, STARTING_FOOD)
+    .run(ORDERS_PER_TURN, STARTING_ORE, STARTING_FOOD)
   setSetting('last_reset', currentDaybreakStamp())
   setSetting('phase', 'running')
   setSetting('end_at', endAt.toISOString())
@@ -332,7 +333,7 @@ function startFinaleImpl() {
 }
 
 // Back to a fresh lobby: wipes players and events, keeps cadence settings
-// (tick interval, orders/day, nightfall) as they carry over fine between games.
+// (tick interval, orders/turn, nightfall) as they carry over fine between games.
 function resetGameImpl() {
   db.prepare('DELETE FROM players').run()
   db.prepare('DELETE FROM events').run()
@@ -431,7 +432,7 @@ function queueOrderImpl(playerId, type, q, r, opts = {}) {
   if (!gameOpen()) return { error: 'Orders are closed: the game is paused, ended, or not launched.' }
   const p = db.prepare('SELECT * FROM players WHERE id = ?').get(playerId)
   if (!p) return { error: 'Unknown player.' }
-  if (p.orders_left < 1) return { error: 'No orders left today — more at Daybreak.' }
+  if (p.orders_left < 1) return { error: 'No orders left — more arrive after the next turn resolves.' }
   // Heists target an EMPIRE, not a tile — handled before tile validation.
   if (type === 'heist') {
     const target = Number(opts.targetPlayer)
@@ -567,13 +568,12 @@ function cancelOrderImpl(playerId, orderId) {
   return { ok: true, me: personalState(playerId) }
 }
 
-// A fixed budget resets at Daybreak; queued plans survive the reset.
+// Daybreak remains independent: it controls heists and daily quest allowances.
 function maybeDailyReset(events) {
   const stamp = currentDaybreakStamp()
   if (getSetting('last_reset') === stamp) return false
   setSetting('last_reset', stamp)
-  db.prepare('UPDATE players SET orders_left = ?').run(Number(getSetting('orders_per_day')))
-  events.push(addEvent('daybreak', '🌅 Daybreak — unspent orders expire. A new day begins.'))
+  events.push(addEvent('daybreak', '🌅 Daybreak — a new day begins.'))
   return true
 }
 
@@ -884,7 +884,7 @@ function resolveTurnImpl() {
   setSetting('tick_count', n)
   const events = []
   const wasDaybreak = maybeDailyReset(events)
-  // Orders are a fixed daily budget; extra turns never create extra orders.
+  // Daybreak processing is independent of the per-turn order refill below.
 
   // Pacts expire peacefully once their agreed term has run.
   for (const pact of db.prepare("SELECT * FROM pacts WHERE status = 'active' AND expires_tick IS NOT NULL AND ? > expires_tick").all(n)) {
@@ -1021,7 +1021,12 @@ function resolveTurnImpl() {
   checkQuests(events, battleWinners)
   dealQuests()
 
-  db.prepare('UPDATE players SET ready = 0').run()
+  // Grant only after successful resolution. Ordinary turns bank another five;
+  // Daybreak replaces the old bank with five instead of adding a second grant.
+  const allowance = ORDERS_PER_TURN
+  db.prepare(wasDaybreak
+    ? 'UPDATE players SET ready = 0, orders_left = ?'
+    : 'UPDATE players SET ready = 0, orders_left = orders_left + ?').run(allowance)
   events.push(addEvent('tick', `⏱️ Turn ${n} resolved.`))
   return events
 }
@@ -1253,8 +1258,7 @@ export function publicState() {
     nextTickAt: s.phase === 'running' ? s.next_tick_at || null : null,
     nightfall: { start: s.nightfall_start, end: s.nightfall_end, active: night },
     daybreakAt: night ? nextDaybreak().toISOString() : null,
-    ordersPerTurn: Number(s.orders_per_turn),
-    ordersPerDay: Number(s.orders_per_day),
+    ordersPerTurn: ORDERS_PER_TURN,
     paused: !!s.paused_at,
     rehearsal: s.allow_fast_forward === '1',
     serverNow: new Date().toISOString(),
@@ -1328,8 +1332,10 @@ export function startScheduler(io) {
 }
 
 export const queueOrder = db.transaction((...args) => {
+  const previousId = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM orders').get().id
   const result = queueOrderImpl(...args)
-  if (result.ok) db.prepare("UPDATE orders SET budget_day=? WHERE player_id=? AND status='queued' AND budget_day IS NULL").run(getSetting('last_reset'),args[0])
+  // Stamp only new orders, never reclassify untagged plans from an older version.
+  if (result.ok) db.prepare("UPDATE orders SET budget_day=? WHERE player_id=? AND id>? AND status='queued' AND budget_day IS NULL").run(getSetting('last_reset'),args[0],previousId)
   return result
 })
 

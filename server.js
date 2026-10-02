@@ -8,7 +8,7 @@ import { Server } from 'socket.io'
 import QRCode from 'qrcode'
 import { db, allSettings, setSetting, getSetting } from './src/db.js'
 import {
-  addEvent, assignSpawn, createPlayer, findPlayerByToken, launchGame, endGame, resetGame,
+  ORDERS_PER_TURN, addEvent, assignSpawn, createPlayer, findPlayerByToken, launchGame, endGame, resetGame,
   getEmblem, fallbackEmblemSvg, listPlayers, publicState, recentEvents, startScheduler,
   personalState, queueOrder, cancelOrder, fireTurn, toggleBot, abandonQuest, setReady,
   findPlayerByAbbrPin, sendMessage, getThread, proposePact, respondPact, withdrawPact, startFinale,
@@ -47,7 +47,7 @@ app.get('/howtoplay', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store')
   res.send(howToPlayPage({
     tickIntervalMin: Number(settings.tick_interval_min),
-    ordersPerDay: Number(settings.orders_per_day),
+    ordersPerTurn: ORDERS_PER_TURN,
   }))
 })
 
@@ -287,7 +287,7 @@ app.get('/admin', (_req, res) => res.send(adminPage(adminState(), allSettings())
 
 app.post('/admin/settings', (req,res) => {
   const updates = {}
-  const limits = {tick_interval_min:[1,720],orders_per_day:[1,100],quests_per_day:[0,10],bot_count:[0,40]}
+  const limits = {tick_interval_min:[1,720],quests_per_day:[0,10],bot_count:[0,40]}
   for (const [key,[min,max]] of Object.entries(limits)) {
     if (req.body[key] == null) continue
     const n = Number(req.body[key])
@@ -304,7 +304,7 @@ app.post('/admin/settings', (req,res) => {
     updates.end_at = end.toISOString()
   }
   if (getSetting('phase') !== 'lobby') {
-    for (const key of ['tick_interval_min','orders_per_day','quests_per_day','bot_count','nightfall_start','nightfall_end']) {
+    for (const key of ['tick_interval_min','quests_per_day','bot_count','nightfall_start','nightfall_end']) {
       if (updates[key] != null && updates[key] !== getSetting(key)) return res.status(400).send(adminPage(adminState(),allSettings(),'Cadence and scoring rules are locked after launch.'))
     }
   }

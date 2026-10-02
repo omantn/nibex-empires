@@ -34,21 +34,26 @@ test('end refunds unresolved paid orders once, locks changes, and freezes replay
  g.endGame();assert.equal(treasury(a.id).ore,5);assert(g.cancelOrder(a.id,id).error);assert(g.exchange(a.id,'ore2food',1).error)
  const frozen=getSetting('finale_data');g.startFinale();g.startFinale();assert.equal(getSetting('finale_data'),frozen)
 })
-test('daily budget never grows from extra turns',()=>{
- const {a}=setup();for(let i=0;i<4;i++)g.resolveTurn();assert.equal(treasury(a.id).orders_left,20)
+test('launch grants five and ordinary turns bank five without a cap',()=>{
+ const {a}=setup();assert.equal(treasury(a.id).orders_left,5)
+ db.prepare('UPDATE players SET orders_left=3 WHERE id=?').run(a.id)
+ g.resolveTurn();assert.equal(treasury(a.id).orders_left,8)
+ g.resolveTurn();assert.equal(treasury(a.id).orders_left,13)
+ db.prepare('UPDATE players SET orders_left=99 WHERE id=?').run(a.id)
+ g.resolveTurn();assert.equal(treasury(a.id).orders_left,104)
 })
 test('Daybreak resets budget once and resolves a daytime heist plan only then',()=>{
  const {a,b}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,b.id)
  db.prepare('INSERT INTO relics(player_id,value) VALUES (?,4)').run(b.id)
  assert(g.queueOrder(a.id,'heist',null,null,{targetPlayer:b.id}).ok)
  g.resolveTurn();assert.equal(g.personalState(a.id).orders.length,1)
- assert.equal(treasury(a.id).orders_left,19)
+ assert.equal(treasury(a.id).orders_left,9)
  setSetting('last_reset','yesterday');const oldRandom=Math.random;Math.random=()=>0.5
  try {g.resolveTurn()}finally{Math.random=oldRandom}
- assert.equal(treasury(a.id).orders_left,20)
+ assert.equal(treasury(a.id).orders_left,5)
  assert.equal(g.personalState(a.id).orders.length,0)
  assert.equal(db.prepare('SELECT player_id FROM relics').get().player_id,a.id)
- g.resolveTurn();assert.equal(treasury(a.id).orders_left,20)
+ g.resolveTurn();assert.equal(treasury(a.id).orders_left,10)
 })
 test('planned expansions advance one frontier per turn',()=>{
  const {a}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,null);tile(2,null);tile(3,null)
@@ -62,6 +67,43 @@ test('cancelling an old plan cannot bank expired daily orders',()=>{
  const {a}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,null);g.queueOrder(a.id,'expand',1,0)
  const id=g.personalState(a.id).orders[0].id;db.prepare("UPDATE orders SET budget_day='old-day' WHERE id=?").run(id)
  const n=treasury(a.id).orders_left;g.cancelOrder(a.id,id);assert.equal(treasury(a.id).orders_left,n)
+})
+test('same-day carried plans refund a banked slot but Daybreak plans do not',()=>{
+ const {a}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,null);tile(2,null);tile(3,null)
+ for(const q of [1,2,3])assert(g.queueOrder(a.id,'expand',q,0).ok)
+ g.resolveTurn();assert.equal(treasury(a.id).orders_left,7)
+ const tail=g.personalState(a.id).orders.find(o=>o.q===3)
+ assert(g.cancelOrder(a.id,tail.id).ok);assert.equal(treasury(a.id).orders_left,8)
+ assert(g.queueOrder(a.id,'expand',3,0).ok)
+ db.prepare("UPDATE orders SET budget_day='yesterday' WHERE status='queued'").run()
+ setSetting('last_reset','yesterday');g.resolveTurn();assert.equal(treasury(a.id).orders_left,5)
+ const carried=g.personalState(a.id).orders[0];assert.equal(carried.q,3)
+ assert(g.cancelOrder(a.id,carried.id).ok);assert.equal(treasury(a.id).orders_left,5)
+})
+test('cancelling a waiting heist returns food and its same-day banked slot',()=>{
+ const {a,b}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,b.id)
+ assert(g.queueOrder(a.id,'heist',null,null,{targetPlayer:b.id}).ok)
+ g.resolveTurn();const before=treasury(a.id),order=g.personalState(a.id).orders[0]
+ assert(g.cancelOrder(a.id,order.id).ok)
+ assert.equal(treasury(a.id).orders_left,before.orders_left+1)
+ assert.equal(treasury(a.id).food,before.food+1)
+})
+test('new orders never restamp legacy untagged queued plans',()=>{
+ const {a}=setup();db.prepare('DELETE FROM tiles').run();tile(0,a.id);tile(1,null);tile(2,null)
+ assert(g.queueOrder(a.id,'expand',1,0).ok)
+ const id=g.personalState(a.id).orders[0].id
+ db.prepare('UPDATE orders SET budget_day=NULL WHERE id=?').run(id)
+ assert(g.queueOrder(a.id,'expand',2,0).ok)
+ assert.equal(db.prepare('SELECT budget_day FROM orders WHERE id=?').get(id).budget_day,null)
+})
+test('Nightfall blocks both resolution and order grants',()=>{
+ const {a}=setup();db.prepare('UPDATE players SET orders_left=0').run()
+ const now=new Date(),until=new Date(now.getTime()+60000)
+ const hm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')
+ setSetting('nightfall_start',hm(now));setSetting('nightfall_end',hm(until))
+ const tick=getSetting('tick_count')
+ g.fireTurn({emit(){},to(){return {emit(){}}}})
+ assert.equal(getSetting('tick_count'),tick);assert.equal(treasury(a.id).orders_left,0)
 })
 test('attack outcomes do not depend on submission order',()=>{
  const {a,b}=setup();const oldRandom=Math.random;Math.random=()=>0.5
@@ -83,7 +125,7 @@ test('failed turn rolls back orders, production, counter, and next deadline',()=
 })
 test('pause blocks mutations and resume preserves remaining turn time',()=>{
  const {a}=setup();g.pauseGame();assert(g.exchange(a.id,'ore2food',1).error);assert(g.abandonQuest(a.id).error)
- assert.deepEqual(g.resolveTurn(),[]);g.resumeGame();assert.equal(getSetting('paused_at'),'');assert(g.exchange(a.id,'ore2food',1).ok)
+ const balance=treasury(a.id).orders_left;assert.deepEqual(g.resolveTurn(),[]);assert.equal(treasury(a.id).orders_left,balance);g.resumeGame();assert.equal(getSetting('paused_at'),'');assert(g.exchange(a.id,'ore2food',1).ok)
 })
 test('PINs are hashed, duplicate abbreviations rejected, old PINs migrate on login',()=>{
  const {a}=setup();assert(a.pin.startsWith('scrypt:'));assert.equal(g.findPlayerByAbbrPin('aa','1234').id,a.id);assert.equal(g.findPlayerByAbbrPin('AA','9999'),null)

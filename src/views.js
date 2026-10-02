@@ -477,7 +477,7 @@ export function joinPage({ error = '', loginError = '', canCreate = true } = {})
 function howToPlayRules(state) {
   return `        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px" class="help">
           <p><b>Turns.</b> The world advances every ${esc(state.tickIntervalMin)} minutes on the host's schedule. Attacks depart together; submitting first provides no combat advantage.</p>
-          <p><b>Your orders.</b> You receive ${esc(state.ordersPerDay)} orders at launch and each Daybreak. Unused orders expire; queued plans carry forward. Cancelling an older day's plan refunds resources but not today's orders. Spending more time in the app gives no extra orders, though reacting to new information can still help.</p>
+          <p><b>Your orders.</b> You receive ${esc(state.ordersPerTurn)} orders at launch. Each ordinary resolved turn adds ${esc(state.ordersPerTurn)} more to your remaining orders, with no banking cap. At Daybreak, your bank resets to ${esc(state.ordersPerTurn)} instead of receiving an extra grant. Queued plans carry forward. Cancelling a plan bought since the latest Daybreak returns its order slot; older plans refund resources only. Nightfall pauses turns and order grants until Daybreak.</p>
           <p><b>Plan ahead.</b> Queue a connected chain of expansions into unclaimed land. Only tiles touching your land at the start of the turn resolve; later steps wait for future turns. If another empire blocks the route, cancel or replan its remaining steps.</p>
           <p><b>🌍 Expand</b> — claim an unclaimed tile touching your territory. Free. If two empires
           grab the same tile on the same turn, it's a standoff: nobody gets it and everyone's order
@@ -564,8 +564,8 @@ function howToPlayRules(state) {
 
 export function howToPlayPage(state, { defaults = false } = {}) {
   const note = defaults
-    ? "This guide uses the default settings. Visit /howtoplay on the game server for the host's configured turn length and daily budget."
-    : "This guide uses the host's current turn length and daily budget. Refresh this page if the host changes the settings."
+    ? "This guide uses the default settings. Visit /howtoplay on the game server for the host's configured turn length and per-turn allowance."
+    : "This guide uses the host's current turn length and per-turn allowance. Refresh this page if the host changes the settings."
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>How to play — Nibex: Empires</title>
@@ -935,7 +935,7 @@ export function playPage(player, state, me) {
       b.hidden = !state.rehearsal;
       b.textContent = ME.ready ? '\\u23f3 Waiting for others\\u2026 (tap to cancel)' : '\\u2705 End turn';
       b.style.background = ME.ready ? '#9e6a03' : '';
-      info.textContent = state.paused ? 'Paused by the host. Saved orders are safe.' : !state.rehearsal ? state.ordersPerDay + ' orders per day · scheduled turns · plan ahead, then enjoy Nibex.' : night ? 'Nightfall \\u2014 no turns until Daybreak.'
+      info.textContent = state.paused ? 'Paused by the host. Saved orders are safe.' : !state.rehearsal ? state.ordersPerTurn + ' added per turn · bank unused orders · resets at Daybreak.' : night ? 'Nightfall \\u2014 no turns until Daybreak.'
         : (et.humans ? et.ready + '/' + et.humans + ' ready \\u2014 when everyone is, the turn fires early' : '');
     }
     function renderQuest() {
@@ -1198,7 +1198,7 @@ export function adminPage(state, settings, error = '') {
       <p class="muted">Times use the server’s local timezone. Cadence is locked after launch. Pausing holds turns but does not extend the trophy deadline.</p>
       <label>Game ends at (required before launch)</label><input aria-label="Game ends at (required before launch)" type="datetime-local" name="end_at" value="${esc(endLocal)}">
       <label>Turn length (minutes)</label><input aria-label="Turn length (minutes)" type="number" name="tick_interval_min" min="1" value="${esc(settings.tick_interval_min)}">
-      <label>Daily order budget (resets at Daybreak)</label><input aria-label="Daily order budget (resets at Daybreak)" type="number" name="orders_per_day" min="1" max="100" value="${esc(settings.orders_per_day)}">
+      <p class="muted" style="margin-top:12px">Orders: ${esc(state.ordersPerTurn)} at launch, +${esc(state.ordersPerTurn)} each ordinary turn, bank reset to ${esc(state.ordersPerTurn)} at Daybreak. Unused orders bank without a cap.</p>
       <label>Nightfall start / end (24h local)</label>
       <div style="display:flex;gap:8px">
         <input type="time" name="nightfall_start" value="${esc(settings.nightfall_start)}">

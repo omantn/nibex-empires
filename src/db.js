@@ -129,13 +129,13 @@ ensureColumn('events', 'data', 'TEXT')
 ensureColumn('orders', 'budget_day', 'TEXT')
 
 export const DEFAULTS = {
-  orders_per_day: '20',
+  orders_per_day: '20', // Legacy setting, no longer used for order grants.
   allow_fast_forward: '0',
   paused_at: '',
   scheduler_error: '',
   phase: 'lobby',            // lobby | running | finale
   tick_interval_min: '180',
-  orders_per_turn: '5',
+  orders_per_turn: '5', // Legacy value; the current event rule grants a fixed five.
   nightfall_start: '02:00',
   nightfall_end: '10:00',
   quests_per_day: '2',

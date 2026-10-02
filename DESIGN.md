@@ -8,8 +8,8 @@ A background strategy game for the Nibex weekend, with secret identities, diplom
 
 ## Cadence and planning
 
-- Default: 180-minute turns, 20 orders per day, two quest deals per day. Host configures these before launch.
-- All players receive the daily budget at launch and at Daybreak; it does not accrue per turn. Unspent orders expire at Daybreak.
+- Default: 180-minute turns and two quest deals per day; the host configures cadence and quests before launch. The order grant is fixed at five.
+- All players receive five orders at launch. Every ordinary successfully resolved turn adds five to the remaining balance, uncapped. The Daybreak turn resets the bank to five instead of adding. Nightfall pauses turns and grants; Daybreak also controls heists and daily quest allowances.
 - Queued expansion routes survive Daybreak and advance one frontier each turn. A plan can extend from owned land or an already queued expansion. Blocked downstream steps wait for the player to cancel or reconnect the route.
 - Cancelling current-day plans restores their order slots. Cancelling older plans does not add old slots to today's budget. Pending paid costs are refunded during play.
 - Nightfall defaults to 02:00–10:00 server-local time. Orders may be planned at any time; no automatic turns resolve overnight. Heists can be queued by day and resolve only at Daybreak.

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { howToPlayPage, playPage } from '../src/views.js'
 
-const defaults = { tickIntervalMin: 180, ordersPerDay: 20 }
+const defaults = { tickIntervalMin: 180, ordersPerTurn: 5 }
 const rules = html => html.match(/<div[^>]*class="help">([\s\S]*?)<\/div>/)?.[1]
 
 test('public guide and player panel contain the same full rules', () => {
-  const state = { tickIntervalMin: 90, ordersPerDay: 12 }
+  const state = { tickIntervalMin: 90, ordersPerTurn: 12 }
   const guide = howToPlayPage(state)
   const panel = playPage({ id: 1, empire: 'Example', abbr: 'EX', name: 'Private name' }, state, {})
   assert.ok(rules(guide))
@@ -21,7 +21,7 @@ test('public guide and player panel contain the same full rules', () => {
 
 test('guide escapes configured values and does not serialize game state', () => {
   const unsafe = '<img src=x onerror=alert(1)>'
-  const guide = howToPlayPage({ tickIntervalMin: unsafe, ordersPerDay: unsafe, players: [{ name: 'Private name' }] })
+  const guide = howToPlayPage({ tickIntervalMin: unsafe, ordersPerTurn: unsafe, players: [{ name: 'Private name' }] })
   assert.ok(!guide.includes(unsafe))
   assert.match(guide, /&lt;img/)
   assert.doesNotMatch(guide, /Private name/)

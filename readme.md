@@ -14,7 +14,7 @@ Alternatively, set ADMIN_PASSWORD in the process environment and run `npm start`
 
 Clone the repo, then run `./setup-pi.sh`. It installs Node if needed, installs dependencies, asks for the admin password and port, and registers a systemd service that starts on boot and restarts on crash. Re-run it any time to change the password or port.
 
-Before updating, download an Admin backup and make sure no scored game is in progress. From the existing repository, run `git pull --ff-only`, then `npm ci` to install the exact patched dependencies, and `npm test`. Only after those succeed, run `sudo systemctl restart nibex` and verify `/howtoplay` and `/join` from an event-Wi-Fi phone. Do not reset the database or rerun setup just to apply this update.
+Before updating, download an Admin backup. This order-refill update preserves an existing game, its queued moves, resources and next turn time; it does not refill on installation or restart. The first grant arrives after the next scheduled turn resolves. Ordinary turns add five to each balance; the Daybreak turn resets the bank to five instead. Refresh player phones after restarting to load the updated rules and controls. From the existing repository, run `git pull --ff-only`, then `npm ci` to install the exact patched dependencies, and `npm test`. Only after those succeed, run `sudo systemctl restart nibex` and verify `/howtoplay` and `/join` from an event-Wi-Fi phone. Do not reset the database or rerun setup just to apply this update.
 
 ### TV frame and icons
 
@@ -32,15 +32,15 @@ The sky is drawn with WebGL, so the Pi's GPU does the work. If the TVs are 4K, l
 ## Before the event
 
 1. Download a backup from Admin before replacing an existing rehearsal. New game also takes a backup before clearing state.
-2. Start a fresh lobby for this version: cadence and scoring have changed. Existing databases migrate without wiping players, but do not change versions during a scored competition.
-3. Set the end time, turn length, daily orders, Nightfall and quest allowance before launch. Defaults are 180-minute turns, 20 orders per day, two quests per day and Nightfall from 02:00 to 10:00. Times use the server computer's local timezone.
+2. Start a fresh lobby for a new event. The order-banking update also supports an existing running game without a reset; preserve its database and queued moves.
+3. Set the end time, turn length, Nightfall and quest allowance before launch. The order grant is fixed at five. Defaults are 180-minute turns, 5 orders per turn, two quests per day and Nightfall from 02:00 to 10:00. Times use the server computer's local timezone.
 4. Leave Rehearsal mode off for the cup. It enables early consensus/admin turns and cannot be changed after launch.
 5. Test the join QR on a phone connected to the event Wi-Fi. Confirm the TV can reach the dashboard, and that real phones reconnect after sleeping.
 6. Run a short rehearsal with a few people. The automated tests verify correctness; human playtesting is still needed to tune the three-hour cadence, resource growth and quest difficulty.
 
 ## During play
 
-Players receive a fixed daily order budget. They can plan connected expansion routes that advance one frontier per turn. Current-day cancellations return the order slot; cancelling plans bought on previous days does not bank old daily allowances. Paid ore/food always returns when a pending order is cancelled during play.
+Players receive five orders at launch. Each ordinary resolved turn adds five to the remaining balance, with no banking cap. At Daybreak the bank resets to five instead of receiving an additional grant. Nightfall pauses turns and order grants. They can plan connected expansion routes that advance one frontier per turn. Cancelling a plan bought since the latest Daybreak returns its order slot; cancelling an older plan does not restore expired slots after the morning reset. Paid ore/food always returns when a pending order is cancelled during play.
 
 The player map opens on their capital, with zoom/pan controls and a World overview. The TV leaderboard rotates through groups of readable rows every ten seconds.
 
@@ -64,8 +64,8 @@ Missed turns collapse into one late turn rather than replaying many turns. The d
 
 ## Verification
 
-Run `npm test`. Tests use disposable databases and an isolated HTTP server on port 3187; they never open the event database. Coverage includes simultaneous attacks, transactional rollback, private identities, safe page serialization, market/muster scoring, final lock, daily budgets, expansion plans, PIN migration, settings validation and backup recovery in a new process.
+Run `npm test`. Tests use disposable databases and an isolated HTTP server on port 3187; they never open the event database. Coverage includes simultaneous attacks, transactional rollback, private identities, safe page serialization, market/muster scoring, final lock, per-turn budgets, expansion plans, PIN migration, settings validation and backup recovery in a new process.
 
 ## Player instructions
 
-Share `/howtoplay` on the game server with players before they join. It is public, mobile-friendly and printable, and shows the host's configured turn length and daily budget when the page is loaded. It shares its rules with the How to play panel on `/play`. HOW-TO-PLAY.html is a printable export using the defaults; regenerate it with `npm run guide`. The older HOW-TO-PLAY.pdf is a pre-review export and should not be handed out for this version. DESIGN.md describes the current rules.
+Share `/howtoplay` on the game server with players before they join. It is public, mobile-friendly and printable, and shows the host's configured turn length and per-turn allowance when the page is loaded. It shares its rules with the How to play panel on `/play`. HOW-TO-PLAY.html is a printable export using the defaults; regenerate it with `npm run guide`. The older HOW-TO-PLAY.pdf is a pre-review export and should not be handed out for this version. DESIGN.md describes the current rules.
