@@ -15,6 +15,7 @@ import {
   exchange, pauseGame, resumeGame,
 } from './src/game.js'
 import { readReplay } from './src/replay.js'
+import { createReplayBroadcast } from './src/replay-broadcast.js'
 import { replayPage } from './src/replay-view.js'
 import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage, howToPlayPage, parseInset } from './src/views.js'
 
@@ -22,6 +23,9 @@ const PORT = Number(process.env.PORT ?? 3000)
 const app = express()
 const server = http.createServer(app)
 const io = new Server(server)
+const timelapse = createReplayBroadcast({ readReplay, getSettings: allSettings,
+  notify: packet => io.emit('timelapse', packet),
+})
 
 app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
@@ -60,6 +64,12 @@ app.get('/dashboard', async (req, res) => {
   const qr = await QRCode.toDataURL(joinUrl, { margin: 1, width: 440 })
   const inset = req.query.inset != null ? parseInset(req.query.inset) : DASHBOARD_INSET
   res.send(dashboardPage(publicState(), joinUrl, qr, recentEvents(), inset))
+})
+
+// Safe presentation-only state, shared by every TV and refreshed on reconnect.
+app.get('/api/timelapse', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  res.json(timelapse.state())
 })
 
 // Founding is open in the lobby; after launch it needs the admin toggle.
@@ -290,6 +300,19 @@ app.get('/admin/timelapse', (_req, res) => {
   res.send(replayPage(readReplay()))
 })
 
+app.post('/admin/timelapse/start', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const result = timelapse.start()
+  if (result.error) return res.status(result.status).send(adminPage(adminState(), allSettings(), result.error))
+  res.redirect('/admin')
+})
+
+app.post('/admin/timelapse/stop', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  timelapse.stop()
+  res.redirect('/admin')
+})
+
 app.get('/admin', (_req, res) => res.send(adminPage(adminState(), allSettings())))
 
 app.post('/admin/settings', (req,res) => {
@@ -346,7 +369,9 @@ app.post('/admin/launch', (req, res) => {
 
 app.post('/admin/reset', async (_req, res, next) => {
   try { await createSnapshot('before-reset') } catch(e) { return next(e) }
-  io.emit('event', resetGame())
+  const event = resetGame()
+  timelapse.stop()
+  io.emit('event', event)
   io.emit('state', publicState())
   res.redirect('/admin')
 })
@@ -366,6 +391,7 @@ app.post('/admin/bot/:id', (req, res) => {
 
 app.post('/admin/finale', (_req, res) => {
   const result = startFinale()
+  if (result.ok) timelapse.stop()
   if (result.event) io.emit('event', result.event)
   if (result.ok) io.emit('state', publicState())
   res.redirect('/admin')
@@ -391,6 +417,7 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   socket.emit('state',publicState())
+  socket.emit('timelapse',timelapse.state())
   const player = findPlayerByToken(getCookie({headers:socket.handshake.headers},'nibex_token'))
   if (player) socket.emit('me',personalState(player.id))
 })

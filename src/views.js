@@ -1,3 +1,4 @@
+import { DASHBOARD_REPLAY } from './replay-dashboard.js'
 // Server-rendered pages for the walking skeleton. A real frontend can replace
 // these; live updates already flow over socket.io.
 
@@ -207,6 +208,10 @@ const TV_CSS = `
   .cf { position: fixed; top: -24px; width: 10px; height: 16px; z-index: 50; animation: cffall linear forwards; }
   @keyframes cffall { to { transform: translateY(112vh) rotate(900deg); } }
   #finaleStage { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; }
+  #timelapseStage { flex:1; min-height:0; display:none; flex-direction:column; align-items:center; padding:0 20px 14px; gap:8px; }
+  #timelapseMap { flex:1; min-height:0; width:100%; }
+  #timelapseLegend { max-height:12vh; overflow:auto; text-align:center; color:#9ec1ff; }
+  #timelapseStatus { color:#8b949e; text-align:center; }
   .track { display: inline-block; white-space: nowrap; animation: crawl linear infinite; font-size: 1.05rem; }
   .track span { padding-right: 60px; }
   @keyframes crawl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -229,6 +234,11 @@ export function dashboardPage(state, joinUrl, qrDataUrl, events, inset = '') {
       <div class="count" id="lobbycount"></div>
     </div>
     <div id="finaleStage"></div>
+    <section id="timelapseStage" aria-label="Shared map timelapse">
+      <h2 id="timelapseLabel" aria-live="polite"></h2>
+      <svg id="timelapseMap" role="img" aria-label="Historical territory ownership"></svg>
+      <div id="timelapseLegend"></div><p id="timelapseStatus" role="status"></p>
+    </section>
     <div class="tv-main" id="live">
       <section class="mapwrap"><svg id="map"></svg></section>
       <aside class="tv-side">
@@ -236,12 +246,13 @@ export function dashboardPage(state, joinUrl, qrDataUrl, events, inset = '') {
         <div class="card lb"><h2>Leaderboard <small style="font-size:.65em;font-weight:400">rotates every 10s</small></h2><ol id="roster"></ol></div>
       </aside>
     </div>
-    <footer class="tickerbar"><div class="track" id="track"></div></footer>
+    <footer class="tickerbar" id="dashboardTicker"><div class="track" id="track"></div></footer>
   </div>`
   const script = `
     window.__STATE__ = ${scriptJson(state)};
     ${MAP_RENDERER}
     ${CLIENT_HELPERS}
+    ${DASHBOARD_REPLAY}
     const escH = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
     let tickerEvents = ${scriptJson(events.map(({ id, tick, type, message, data }) => ({ id, tick, type, message, data })).reverse())};
     // Each turn's resolution replaces the crawl — the ticker shows THIS turn's
@@ -311,6 +322,9 @@ export function dashboardPage(state, joinUrl, qrDataUrl, events, inset = '') {
     }, 300);
     window.__dbg = () => ({ spotId: spot && spot.id, spotType: spot && spot.type, tickerIds: tickerEvents.map((e) => e.id) });
     function render() {
+      if (renderTimelapse()) return;
+      document.getElementById('timelapseStage').style.display = 'none';
+      document.getElementById('dashboardTicker').style.display = 'flex';
       document.getElementById('lobby').style.display = state.phase === 'lobby' ? 'flex' : 'none';
       document.getElementById('live').style.display = state.phase === 'lobby' || state.phase === 'finale' ? 'none' : 'flex';
       document.getElementById('finaleStage').style.display = state.phase === 'finale' ? 'flex' : 'none';
@@ -422,7 +436,7 @@ export function dashboardPage(state, joinUrl, qrDataUrl, events, inset = '') {
       if (ol.scrollHeight > ol.clientHeight) fitLB();
       if (state.phase === 'lobby') return;
       const el = document.getElementById('countdown'), lb = document.getElementById('countlabel');
-      if (state.phase === 'finale') { renderFinale(); return; }
+      if (state.phase === 'finale') { if (!broadcast) renderFinale(); return; }
       const night = state.nightfall.active;
       lb.textContent = state.paused ? 'PAUSED BY HOST' : night ? 'NIGHTFALL — DAYBREAK IN' : 'NEXT TURN IN';
       const target = night ? state.daybreakAt : state.nextTickAt;
@@ -1250,8 +1264,8 @@ export function adminPage(state, settings, error = '') {
       </form>
     </div>
     <div class="card"><h2>Map timelapse</h2>
-      <p class="muted">Replay saved territory changes any time. This does not pause, finish or change the game.</p>
-      <form method="get" action="/admin/timelapse"><button style="margin-top:12px">Play Timelapse</button></form>
+      <p class="muted">Play saved territory changes on every main dashboard. Holds the last saved turn for 5 seconds, then returns automatically. The game keeps running; the winner ceremony stays separate.</p>
+      <div class="btnrow"><form method="post" action="/admin/timelapse/start"><button style="margin-top:12px">Play Timelapse</button></form><form method="post" action="/admin/timelapse/stop"><button class="secondary" style="margin-top:12px">Stop Timelapse</button></form></div><p style="margin-top:12px"><a href="/admin/timelapse">Private preview and playback controls</a></p>
     </div>
     <div class="card"><h2>Empires</h2><ul class="roster">
       ${state.players.map((p) => `<li><img class="emblem" src="/emblem/${p.id}" alt="">${esc(p.empire)} [${esc(p.abbr)}] — <span class="muted">${esc(p.name)}</span>
