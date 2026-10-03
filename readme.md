@@ -56,6 +56,12 @@ At the deadline (or End game now), unexecuted orders expire, their paid resource
 
 Start Finale reveals last place through champion. Names and secret scores are released from the server only as their ceremony beats arrive. Replaying uses the same frozen result. Ties use total score, then territory score, then earlier registration; publish that rule before launch. Final standings rotate in groups of six so every name can be read.
 
+### Optional map timelapse
+
+Admin → **Play Timelapse** opens a separate read-only map replay at any time after launch. Use Play/Pause, Restart, Previous/Next, the timeline slider, speed and Fullscreen. It is a fixed view through the latest completed turn plus any subsequent joins; reopen it to refresh. It never pauses, advances or ends the game, and never starts the ceremony. Return to Admin and use Start Finale for the existing winner reveal.
+
+The replay reconstructs territory from saved expansion/battle events, turn markers and permanent starting wards. Late joins appear in event order. It intentionally omits resource terrain (late spawns overwrite old terrain), private names, troops, orders, resources and scores. It is event-derived history, not archived map snapshots: turn continuity and final ownership are checked, but a lost intermediate change later overwritten by another event cannot always be detected. Missing or inconsistent history shows an unavailable message; normal play and the finale remain independent. Resetting the game clears replay history too, so play it before resetting and retain a backup.
+
 ## Backups and restoration
 
 Automatic SQLite snapshots run at startup and every five minutes. Admin can download one on demand. They include committed WAL state; copying only a live nibex.db file is not a reliable backup. Snapshots live in `backups/` beside the database, or in NIBEX_BACKUP_DIR if configured. Backups contain identities and authentication data: keep them on the host's machine or a private backup drive.

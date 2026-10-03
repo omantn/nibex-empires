@@ -51,7 +51,7 @@ export function layout(title, body, script = '', { css = '', bare = false } = {}
 }
 
 // Client-side SVG hex map renderer, shared by dashboard and /play.
-const MAP_RENDERER = `
+export const MAP_RENDERER = `
   const TERRAIN_FILL = { plains: '#1a2230', ore: '#2c3a4e', food: '#243d2c', relic: '#3a2d52' };
   const TERRAIN_ICON = { ore: '\\u26cf\\ufe0f', food: '\\ud83c\\udf3e', relic: '\\u2728' };
   const _blendCache = {};
@@ -1248,6 +1248,10 @@ export function adminPage(state, settings, error = '') {
         <p class="muted">Wipes players and events, returns to Lobby with the join QR code on the dashboard.</p>
         <div style="margin-top:12px"><button class="danger">Initialize new game</button></div>
       </form>
+    </div>
+    <div class="card"><h2>Map timelapse</h2>
+      <p class="muted">Replay saved territory changes any time. This does not pause, finish or change the game.</p>
+      <form method="get" action="/admin/timelapse"><button style="margin-top:12px">Play Timelapse</button></form>
     </div>
     <div class="card"><h2>Empires</h2><ul class="roster">
       ${state.players.map((p) => `<li><img class="emblem" src="/emblem/${p.id}" alt="">${esc(p.empire)} [${esc(p.abbr)}] — <span class="muted">${esc(p.name)}</span>

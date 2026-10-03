@@ -14,6 +14,8 @@ import {
   findPlayerByAbbrPin, sendMessage, getThread, proposePact, respondPact, withdrawPact, startFinale,
   exchange, pauseGame, resumeGame,
 } from './src/game.js'
+import { readReplay } from './src/replay.js'
+import { replayPage } from './src/replay-view.js'
 import { dashboardPage, joinPage, playPage, adminPage, adminLoginPage, howToPlayPage, parseInset } from './src/views.js'
 
 const PORT = Number(process.env.PORT ?? 3000)
@@ -282,6 +284,11 @@ app.use('/admin', (req, res, next) => {
 
 // Admin sees the full roster even during the anonymous lobby.
 const adminState = () => ({ ...publicState(), players: listPlayers() })
+
+app.get('/admin/timelapse', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(replayPage(readReplay()))
+})
 
 app.get('/admin', (_req, res) => res.send(adminPage(adminState(), allSettings())))
 
